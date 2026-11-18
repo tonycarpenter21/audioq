@@ -2,8 +2,12 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["jest", "node"]
+    "module": "CommonJS",
+    "moduleResolution": "node10",
+    "esModuleInterop": true,
+    "types": ["jest", "node"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
-  "include": ["__tests__/**/*", "src/**/*"],
-  "exclude": ["node_modules", "dist"]
-} 
+  "include": ["__tests__/**/*", "src/**/*"]
+}

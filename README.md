@@ -1,486 +1,310 @@
-# AudioQ
-The purpose of this package is to help manage the playback of audio files. 
+# audioq
 
-🎵 [Demo](https://tonycarpenter21.github.io/audio-queue-demo/queue-management)
+Queue audio files on independent channels in the browser: play them in order, pause and resume
+with fades, duck background audio under a voice-over, and react to events. Zero dependencies,
+about 10 KB gzipped, TypeScript types included.
 
-📚 [Docs](https://tonycarpenter21.github.io/audio-queue-docs/)
+- 🎵 [Demo](https://tonycarpenter21.github.io/audio-queue-demo/queue-management)
+- 📚 [Docs](https://tonycarpenter21.github.io/audio-queue-docs/)
+- 📦 [npm](https://www.npmjs.com/package/audioq)
+- Upgrading from 2.x? See [MIGRATION.md](MIGRATION.md).
 
-## Key Features
-
-- **Multi-channel queue management** - Independent audio queues for concurrent playback
-- **Pause/Resume functionality** - Full playback control for individual channels or all channels
-- **Volume control with ducking** - Dynamic volume management, global volume control, and automatic background audio reduction
-- **Loop support** - Seamless audio looping for background music and ambient sounds
-- **Priority queueing** - Add urgent audio to the front of any queue
-- **Real-time progress tracking** - Comprehensive playback monitoring and metadata
-- **Event-driven architecture** - Extensive callback system for UI integration
-- **TypeScript support** - Full type definitions and IntelliSense support
-- **Zero dependencies** - Lightweight and self-contained
-- **Backward compatible** - All existing APIs continue to work
-
-This package offers TypeScript support, has zero dependencies, and is released under the MIT license.
-
-To preview this package and see how it works with visualized code examples, check out the demo that can be found here: [AudioQ Demo](https://tonycarpenter21.github.io/audio-queue-demo/). (A link to the demo repo can be found here: [AudioQ Demo Repo](https://github.com/tonycarpenter21/audio-queue-demo).)
-
-NPM package can be found [here](https://www.npmjs.com/package/audioq).
-
-GitHub Repo can be found [here](https://github.com/tonycarpenter21/audioq).
-
-Documentation can be found [here](https://tonycarpenter21.github.io/audio-queue-docs/)
-
-## 🌐 Browser Compatibility
-
-This package is designed for **browser environments** and uses the Web Audio API (`HTMLAudioElement`). It is **not** intended for Node.js server-side use.
-
-### **Supported Browsers:**
-- **Chrome 51+** (June 2016)
-- **Firefox 54+** (June 2017)  
-- **Safari 10+** (September 2016)
-- **Edge 15+** (April 2017)
-- **Mobile browsers** with HTML5 audio support
-
-### **Development Requirements:**
-- **Node.js 14+** (for building and testing only)
-- **TypeScript 4.5+** (included in devDependencies)
-
-### **Not Supported:**
-- Node.js server environments (no HTMLAudioElement)
-- Internet Explorer (lacks ES6 support)
-- Web Workers (no DOM access)
-
-## Architecture & Code Organization 🏗️
-
-Modular architecture for maintainability and extensibility:
-
-```
-src/
-├── index.ts     # Main entry point with organized exports
-├── types.ts     # TypeScript interfaces and type definitions  
-├── core.ts      # Core queue management functions
-├── pause.ts     # Pause and resume functionality
-├── volume.ts    # Volume control and ducking management
-├── info.ts      # Audio information and progress tracking
-├── events.ts    # Event handling and emission logic
-└── utils.ts     # Helper functions and utilities
+```bash
+npm install audioq
 ```
 
-## How To Install This Package:
-Install this package by running either of these commands (typescript packages are included automatically):
-- For npm run `npm install audioq`
-- For yarn run `yarn add audioq`
+## Quick start
 
-## Basic Queue Management Functions:
+```ts
+import { queueAudio, onAudioComplete } from 'audioq';
 
-### Queue Audio
-```typescript
-// Add an audio file to the queue and start playing it automatically.
-queueAudio(audioUrl, channelNumber?, options?);
-await queueAudio('hello.mp3'); // Add to default channel 0
-await queueAudio('laser.mp3', 1, { loop: true, volume: 0.8 }); // Add to channel 1 with options
+await queueAudio('/sfx/hello.mp3'); // plays now
+await queueAudio('/sfx/world.mp3'); // plays after hello.mp3
+
+onAudioComplete(0, (info) => console.log(`${info.fileName} finished (${info.reason})`));
 ```
 
+Each **channel** (0-63) has its own queue, volume, pause state and events, so sound effects, music
+and voice can play at the same time without interrupting each other. Channel 0 is the default.
 
-### Queue Audio with Priority
-```typescript
-// Add a file to the front of the queue (plays after current audio finishes).
-queueAudioPriority(audioUrl, channelNumber?, options?);
-await queueAudioPriority('urgent.mp3'); // Add to front of default channel 0
-await queueAudioPriority('announcement.mp3', 1, { volume: 1.0 }); // Add to front of channel 1
+```ts
+await queueAudio('/music/theme.mp3', 1, { loop: true, volume: 0.4 }); // music on channel 1
+await queueAudio('/sfx/coin.mp3', 2); // effects on channel 2
 ```
 
+## Two ways to use it
 
-### Stop Current Audio
-```typescript
-// Stop the current audio and automatically start playing the next one in queue.
-stopCurrentAudioInChannel(channelNumber?);
-await stopCurrentAudioInChannel(); // Stop current audio in default channel (0)
-await stopCurrentAudioInChannel(2); // Stop current audio in channel 2
+The top-level functions (`queueAudio`, `pauseChannel`, ...) share one default queue, created the
+first time you use it. For more than one independent player, custom settings, or isolated tests,
+create your own queues with `createAudioQueue`. Every top-level function is also a method on the
+`AudioQueue` it returns.
+
+```ts
+const sfx = createAudioQueue({ defaultMaxQueueSize: 5, dropOldestWhenFull: true });
+await sfx.queueAudio('/sfx/laser.mp3');
+
+const same = getDefaultAudioQueue(); // the queue behind the top-level functions
+same.setQueueConfig({ loadTimeoutMs: 10000 });
 ```
 
+Importing audioq has no side effects, so it is safe in server-side rendering (Next.js, Nuxt,
+SvelteKit). Audio only starts when you call `queueAudio` in the browser.
 
-### Stop All Audio in Channel
-```typescript
-// Stop all audio in a channel and remove all enqueued files.
-stopAllAudioInChannel(channelNumber?);
-await stopAllAudioInChannel(); // Stop and clear all audio in default channel (0)
-await stopAllAudioInChannel(1); // Stop and clear all audio in channel 1
+## Queueing
+
+`queueAudio(url, channel?, options?)` accepts relative and absolute URLs, `blob:` URLs and
+`data:` URIs. It resolves as soon as the item is queued and returns a handle:
+
+```ts
+const item = await queueAudio('/voice/intro.mp3');
+const didStart = await item.started; // true once playback starts, false if it never does
+const outcome = await item.finished; // 'ended' | 'stopped' | 'error' | 'removed'
+console.log(item.id, item.src, item.channelNumber, didStart, outcome);
 ```
 
-### Stop All Audio
-```typescript
-// Stop all audio in all channels and remove all enqueued files.
-await stopAllAudio();
+Options (`AudioQueueOptions`):
+
+| Option         | Description                                                            |
+| -------------- | ---------------------------------------------------------------------- |
+| `addToFront`   | Play right after the current item instead of at the end.               |
+| `loop`         | Repeat until stopped.                                                  |
+| `volume`       | Item volume (0-1), multiplied with the channel and global volume.      |
+| `maxQueueSize` | Queue limit for this call only.                                        |
+| `crossOrigin`  | `'anonymous'` or `'use-credentials'` for CORS-enabled files (see iOS). |
+
+```ts
+await queueAudioPriority('/sfx/alert.mp3'); // same as { addToFront: true }
+await stopCurrentAudioInChannel(); // skip to the next item
+await stopAllAudioInChannel(1); // stop channel 1 and clear its queue
+await stopAllAudio(); // stop everything
+await destroyChannel(2); // stop channel 2 and forget its listeners and settings
+await destroyAllChannels(); // reset the queue completely
 ```
 
-## 🔄 Advanced Queue Manipulation:
+### Queue limits
 
-### Remove Queued Item
-```typescript
-// Remove a specific item from the queue by its position (cannot remove currently playing item at index 0).
-removeQueuedItem(queuedSlotNumber, channelNumber?);
-const result = await removeQueuedItem(2); // Remove item at index 2 from default channel (0)
-const result = await removeQueuedItem(1, 1); // Remove item at index 1 from channel 1
+```ts
+setQueueConfig({ defaultMaxQueueSize: 20 }); // every channel
+setChannelQueueLimit(2, 3); // channel 2 only
+setQueueConfig({ dropOldestWhenFull: true }); // drop the oldest waiting item instead of throwing
+console.log(getQueueConfig().defaultMaxQueueSize);
 ```
 
-### Reorder Queue Items
-```typescript
-// Move a queue item from one position to another (cannot move currently playing item at index 0).
-reorderQueue(currentQueuedSlotNumber, newQueuedSlotNumber, channelNumber?);
-const result = await reorderQueue(3, 1); // Move item from index 3 to index 1 in default channel (0)
-const result = await reorderQueue(2, 4, 1); // Move item from index 2 to index 4 in channel 1
+When a channel is full, `queueAudio` rejects, unless `dropOldestWhenFull` is set. The playing item
+is never dropped.
+
+### Rearranging a queue
+
+Index 0 is the playing item. Waiting items start at index 1.
+
+```ts
+await reorderQueue(3, 1); // move item 3 so it plays next
+await swapQueueItems(1, 2);
+await removeQueuedItem(2);
+await clearQueueAfterCurrent(); // let the current item finish, drop the rest
+console.log(getQueueLength(), getQueueItemInfo(1)?.fileName);
 ```
 
-### Clear Queue After Current
-```typescript
-// Remove all items from the queue except the currently playing audio.
-clearQueueAfterCurrent(channelNumber?);
-const result = await clearQueueAfterCurrent(); // Clear queue after current in default channel (0)
-const result = await clearQueueAfterCurrent(2); // Clear queue after current in channel 2
+These return `{ success, error?, updatedQueue? }` instead of throwing.
+
+## Pause, resume and fades
+
+```ts
+await pauseChannel(0);
+await resumeChannel(0);
+await togglePauseChannel(0);
+await pauseAllChannels();
+await resumeAllChannels();
+await togglePauseAllChannels();
+console.log(isChannelPaused(0), getAllChannelsPauseState());
+
+await pauseWithFade(FadeType.Gentle, 0); // fade out over 800ms, then pause
+await resumeWithFade(); // fade back in with the matching curve
+await pauseWithFade(FadeType.Dramatic, 1, 1500); // custom duration
+await togglePauseWithFade(FadeType.Linear, 0);
+await pauseAllWithFade(FadeType.Gentle);
+await resumeAllWithFade();
+await togglePauseAllWithFade();
+console.log(getFadeConfig(FadeType.Dramatic).duration);
 ```
 
-### Swap Queue Items
-```typescript
-// Swap the positions of two items in the queue (cannot involve currently playing item at index 0).
-swapQueueItems(firstQueuedSlotNumber, secondQueuedSlotNumber, channelNumber?);
-const result = await swapQueueItems(1, 3); // Swap items at index 1 and 3 in default channel (0)
-const result = await swapQueueItems(2, 4, 1); // Swap items at index 2 and 4 in channel 1
+Calling a resume while a fade-out is still running cancels the pause and fades back in.
+
+## Volume
+
+Output volume is **channel volume × item volume × global volume × ducking × fade**. Each part is
+independent, so setting one never overwrites another.
+
+```ts
+await setChannelVolume(1, 0.5); // instant
+await setChannelVolume(1, 0.2, 500, EasingType.EaseOut); // over 500ms
+await transitionVolume(1, 0.8, 300); // same as setChannelVolume with a duration
+cancelVolumeTransition(1);
+cancelAllVolumeTransitions();
+await setAllChannelsVolume(0.7);
+await setGlobalVolume(0.5); // master volume
+console.log(getChannelVolume(1), getAllChannelsVolume(), getGlobalVolume());
 ```
 
-### Get Queue Item Info
-```typescript
-// Get information about a specific item in the queue.
-getQueueItemInfo(queuedSlotNumber, channelNumber?);
-const itemInfo = getQueueItemInfo(1); // Get info for item at index 1 in default channel (0)
-const info = getQueueItemInfo(2, 1); // Get info for item at index 2 in channel 1
-```
+### Ducking
 
-### Get Queue Length
-```typescript
-// Get the total number of items in a channel's queue.
-getQueueLength(channelNumber?);
-const length = getQueueLength(); // Get queue length for default channel (0)
-const count = getQueueLength(2); // Get queue length for channel 2
-```
+Lower every other channel while a priority channel (for example voice) has audio queued. Channels
+that start while ducking is active are ducked too.
 
-```typescript
-// All queue manipulation functions return a QueueManipulationResult:
-interface QueueManipulationResult {
-  success: boolean;          // Whether the operation was successful
-  error?: string;            // Error message if operation failed
-  updatedQueue?: QueueSnapshot; // The queue snapshot after the operation (if successful)
-}
-```
-
-## 🎛️ Volume Control Functions:
-
-### Set Channel Volume
-```typescript
-// Set the volume for a specific channel (0-1 range).
-setChannelVolume(channelNumber, volume);
-await setChannelVolume(0, 0.5); // Set channel 0 to 50% volume
-await setChannelVolume(1, 0.8); // Set channel 1 to 80% volume
-```
-
-### Get Channel Volume
-```typescript
-// Get the current volume level for a specific channel.
-getChannelVolume(channelNumber?);
-const volume = getChannelVolume(); // Get default channel (0) volume
-console.log(`Channel volume: ${(getChannelVolume(2) * 100).toFixed(0)}%`); // Get channel 2 volume
-```
-
-### Set All Channels Volume
-```typescript
-// Set the same volume level for all channels.
-setAllChannelsVolume(volume);
-await setAllChannelsVolume(0.6); // Set all channels to 60% volume
-await setAllChannelsVolume(0.0); // Mute all channels
-```
-
-### Global Volume Control
-```typescript
-// Set a global volume multiplier that affects all channels while preserving their relative levels.
-setGlobalVolume(volume);
-await setGlobalVolume(0.5); // Set global volume to 50%
-```
-
-```typescript
-// Get the current global volume level.
-getGlobalVolume();
-const globalVol = getGlobalVolume(); // Returns current global volume (0-1)
-console.log(`Global volume: ${(getGlobalVolume() * 100).toFixed(0)}%`);
-```
-
-**How Global Volume Works:**
-The global volume acts as a **global volume multiplier** - it scales all channel volumes proportionally while preserving their individual settings. This is perfect for implementing a global volume slider in your UI.
-
-```typescript
-// Example: Setting up different audio types with a global volume control
-await setChannelVolume(0, 0.3); // SFX channel at 30%
-await setChannelVolume(1, 0.7); // Music channel at 70%
-await setChannelVolume(2, 0.5); // Voice channel at 50%
-
-// User adjusts global volume slider to 50%
-await setGlobalVolume(0.5);
-
-// Actual playback volumes become:
-// - SFX: 30% × 50% = 15%
-// - Music: 70% × 50% = 35%
-// - Voice: 50% × 50% = 25%
-
-// Channel volumes remain at their original settings (0.3, 0.7, 0.5)
-// So when global volume is increased, ratios are preserved
-await setGlobalVolume(1.0); // Back to full volume
-// - SFX: 30% × 100% = 30%
-// - Music: 70% × 100% = 70%
-// - Voice: 50% × 100% = 50%
-```
-
-**Note:** `setAllChannelsVolume()` sets all channels to the **same** volume, while `setGlobalVolume()` **multiplies** all channels by the same amount, preserving their relative differences.
-
-### Volume Ducking (Background Audio Reduction)
-```typescript
-// Automatically reduce other channels' volume when priority audio plays.
-setVolumeDucking(config);
-setVolumeDucking({ priorityChannel: 1, duckingVolume: 0.2 }); // Simple ducking
+```ts
 setVolumeDucking({
+  duckingVolume: 0.2, // other channels drop to 20%
   priorityChannel: 1,
-  priorityVolume: 1.0,
-  duckingVolume: 0.2,
-  transitionDuration: 500
-}); // Full configuration
-```
-
-```typescript
-// Remove volume ducking configuration from all channels.
+  priorityVolume: 1,
+  duckTransitionDuration: 200,
+  restoreTransitionDuration: 400
+});
 clearVolumeDucking();
 ```
 
-## ⏯️ Pause/Resume Functions:
+## Events
 
-### Pause Channel
-```typescript
-// Pause audio playback in a specific channel.
-pauseChannel(channelNumber?);
-await pauseChannel(); // Pause audio in default channel (0)
-await pauseChannel(1); // Pause audio in channel 1
+Every `on*` function returns an unsubscribe function, which removes only that listener (ideal for
+React effects). `off*(channel)` removes every listener of that kind on a channel, and
+`off*(channel, callback)` removes one.
+
+```ts
+const offStart = onAudioStart(0, (info) => console.log('started', info.fileName, info.duration));
+const offComplete = onAudioComplete(0, (info) => console.log(info.reason, info.remainingInQueue));
+const offProgress = onAudioProgress(0, (info) => console.log(info.progress, info.currentTime));
+const offQueue = onQueueChange(0, (snapshot) => console.log(snapshot.items.length));
+const offPause = onAudioPause(0, (channel, info) => console.log('paused', channel, info.fileName));
+const offResume = onAudioResume(0, (channel, info) => console.log('resumed', channel, info.src));
+const offError = onAudioError(0, (error) => console.warn(error.errorType, error.error.message));
+
+[offStart, offComplete, offProgress, offQueue, offPause, offResume, offError].forEach((off) =>
+  off()
+);
+
+offAudioStart(0);
+offAudioComplete(0);
+offAudioProgress(0);
+offQueueChange(0);
+offAudioPause(0);
+offAudioResume(0);
+offAudioError(0);
 ```
 
-### Resume Channel
-```typescript
-// Resume audio playback in a specific channel.
-resumeChannel(channelNumber?);
-await resumeChannel(); // Resume audio in default channel (0)
-await resumeChannel(1); // Resume audio in channel 1
+React example:
+
+<!-- validate:skip -->
+
+```ts
+useEffect(() => onAudioProgress(0, (info) => setProgress(info.progress)), []);
 ```
 
-### Toggle Pause
-```typescript
-// Toggle between pause and resume states.
-togglePauseChannel(channelNumber?);
-await togglePauseChannel(); // Toggle default channel (0)
-await togglePauseChannel(1); // Toggle channel 1
+File names in event payloads are plain text (`rock & roll.mp3`). Frameworks escape them for you;
+escape them yourself if you insert them with `innerHTML`.
+
+## Reading state
+
+```ts
+const info = getCurrentAudioInfo(0); // null when nothing is queued
+if (info) console.log(info.fileName, info.progress, info.isPlaying, info.volume);
+
+const snapshot = getQueueSnapshot(0); // null for a channel that was never used
+console.log(snapshot?.items.map((item) => item.fileName));
+console.log(getAllChannelsInfo());
+console.log(extractFileName('https://cdn.example.com/a%20b.mp3')); // 'a b.mp3'
 ```
 
-### Pause/Resume All Channels
-```typescript
-// Pause all channels simultaneously.
-pauseAllChannels();
-await pauseAllChannels();
+## Errors
+
+A file that fails to load or play is reported through `onAudioError` and skipped; the next item
+plays. A failing item that is still waiting is removed without disturbing the one playing.
+`AudioErrorType` tells you what happened:
+
+| Type              | Meaning                                                             |
+| ----------------- | ------------------------------------------------------------------- |
+| `AutoplayBlocked` | The browser needs a user interaction first. The item is **kept**.   |
+| `Network`         | The file could not be downloaded.                                   |
+| `Decode`          | The file is corrupt.                                                |
+| `Unsupported`     | The browser cannot play this format or source.                      |
+| `Timeout`         | The file did not start within `loadTimeoutMs` (default 15 seconds). |
+| `Abort`           | The browser aborted loading.                                        |
+| `Unknown`         | Anything else.                                                      |
+
+Want retries? Re-queue from the error listener:
+
+```ts
+onAudioError(0, (error) => {
+  if (error.errorType === AudioErrorType.Network) void queueAudio(error.src, error.channelNumber);
+});
 ```
 
-```typescript
-// Resume all channels that were paused.
-resumeAllChannels();
-await resumeAllChannels();
+### Autoplay
+
+Browsers block audio until the user has interacted with the page. audioq keeps blocked items in
+the queue and starts them on the next click, tap or key press. To start them from your own button
+handler instead:
+
+```ts
+button.addEventListener('click', () => unlockAudio());
 ```
 
-### Global Toggle Pause/Resume
-```typescript
-// Smart toggle that pauses all channels if any are playing, or resumes all if all are paused.
-togglePauseAllChannels();
-await togglePauseAllChannels();
+## iOS and Web Audio
+
+iOS ignores `HTMLAudioElement.volume`, so on iOS audioq routes same-origin audio through the Web
+Audio API to make volume, fades and ducking work (`webAudio: 'auto'`, the default). Cross-origin
+files are only routed if you queue them with `crossOrigin: 'anonymous'` and the server sends CORS
+headers; otherwise they play at full volume rather than silently.
+
+```ts
+setQueueConfig({ webAudio: 'off' }); // never use Web Audio
+setQueueConfig({ webAudio: 'force' }); // use it everywhere
+console.log(getWebAudioSupport().reason, isIOSDevice(), isWebAudioSupported());
 ```
 
-### Check Pause State
-```typescript
-// Check if a specific channel is paused.
-isChannelPaused(channelNumber?);
-const isPaused = isChannelPaused(); // Check if default channel (0) is paused
-const channelPaused = isChannelPaused(2); // Check if channel 2 is paused
-```
+All Web Audio routing shares one `AudioContext`, closed by `destroyAllChannels()`.
 
-```typescript
-// Get pause state for all channels.
-getAllChannelsPauseState();
-const allPauseStates = getAllChannelsPauseState();
-```
+## Configuration
 
-## Audio Information and Progress Tracking:
+`createAudioQueue(config)` and `setQueueConfig(config)` accept:
 
-### AudioInfo Interface
-The package provides detailed information about audio playback through the enhanced `AudioInfo` interface:
-```typescript
-interface AudioInfo {
-  currentTime: number;       // Current position in milliseconds
-  duration: number;          // Total duration in milliseconds
-  fileName: string;          // Extracted filename from URL
-  isLooping: boolean;        // Whether audio is set to loop
-  isPaused: boolean;         // Whether audio is currently paused
-  isPlaying: boolean;        // Whether audio is currently playing
-  progress: number;          // Progress as percentage (0-1)
-  src: string;               // Audio file source URL
-  volume: number;            // Current volume level (0-1)
-}
-```
+| Option                | Default   | Description                                                     |
+| --------------------- | --------- | --------------------------------------------------------------- |
+| `defaultMaxQueueSize` | unlimited | Items per channel, including the playing one.                   |
+| `dropOldestWhenFull`  | `false`   | Drop the oldest waiting item instead of rejecting a new one.    |
+| `loadTimeoutMs`       | `15000`   | Skip an item that has not started after this long (0 disables). |
+| `logger`              | `console` | Where warnings go; `null` silences the library.                 |
+| `maxChannels`         | `64`      | Number of channels (`MAX_CHANNELS`).                            |
+| `prefetchCount`       | `1`       | Waiting items to preload ahead of the current one.              |
+| `showQueueWarnings`   | `true`    | Warn when a queue limit is reached.                             |
+| `webAudio`            | `'auto'`  | `'auto'`, `'force'` or `'off'` (see iOS).                       |
 
-### Get Current Audio Info
-```typescript
-// Get information about the currently playing audio in a specific channel.
-getCurrentAudioInfo(channelNumber?);
-const audioInfo = getCurrentAudioInfo(); // Get current audio info for default channel (0)
-const info = getCurrentAudioInfo(1); // Get info for channel 1 - returns AudioInfo | null
-```
+## Browser support
 
-### Get All Channels Info
-```typescript
-// Get audio information for all channels.
-getAllChannelsInfo();
-const allChannelsInfo = getAllChannelsInfo();
-```
+Any browser with ES2017 and `HTMLAudioElement`: Chrome, Edge, Firefox and Safari from 2017
+onwards, plus their mobile versions. Node.js is supported for importing (SSR) but not for playback.
 
-### Queue State Management
-```typescript
-// Get a complete snapshot of the queue state for a specific channel.
-getQueueSnapshot(channelNumber?);
-const queueSnapshot = getQueueSnapshot(); // Get snapshot for default channel (0)
-const snapshot = getQueueSnapshot(2); // Get snapshot for channel 2 - returns QueueSnapshot | null
-```
-
-```typescript
-interface QueueSnapshot {
-  channelNumber: number;     // Channel this snapshot represents
-  currentIndex: number;      // Index of currently playing item
-  isPaused: boolean;         // Whether current audio is paused
-  items: Array<{             // Array of queue items with metadata
-    duration: number;
-    fileName: string;
-    isCurrentlyPlaying: boolean;
-    isLooping: boolean;
-    src: string;
-    volume: number;
-  }>;
-  totalItems: number;        // Total items in queue
-  volume: number;            // Current channel volume (0-1)
-}
-```
-
-### Real-time Progress Tracking
-```typescript
-// Subscribe to real-time progress updates for a specific channel.
-onAudioProgress(channelNumber, callback);
-onAudioProgress(0, (info) => console.log(info.progress)); // Simple progress logging
-onAudioProgress(1, (info) => updateProgressBar(info.currentTime, info.duration)); // Complex UI update
-```
-
-```typescript
-// Remove all progress listeners for a specific channel.
-offAudioProgress(channelNumber?);
-offAudioProgress(); // Remove all progress listeners in default channel (0)
-offAudioProgress(1); // Remove all progress listeners in channel 1
-```
-
-### Enhanced Event System
-```typescript
-// Subscribe to queue change events for visual updates.
-onQueueChange(channelNumber, callback);
-onQueueChange(0, (snapshot) => updateQueueDisplay(snapshot)); // Update UI on queue changes
-```
-
-```typescript
-// Unsubscribe from queue change events (removes ALL queue change callbacks for the channel)
-offQueueChange(channelNumber?);
-offQueueChange(); // Stop receiving all queue change notifications for default channel (0)
-offQueueChange(1); // Stop receiving all queue change notifications for channel 1
-```
-
-```typescript
-// Subscribe to audio start events.
-onAudioStart(channelNumber, callback);
-onAudioStart(0, (info) => console.log(`Started: ${info.fileName}`)); // Log audio starts
-```
-
-```typescript
-// Unsubscribe from audio start events (removes ALL start callbacks for the channel)
-offAudioStart(channelNumber?);
-offAudioStart(); // Stop receiving all start notifications for default channel (0)
-offAudioStart(1); // Stop receiving all start notifications for channel 1
-```
-
-```typescript
-// Subscribe to audio completion events.
-onAudioComplete(channelNumber, callback);
-onAudioComplete(0, (info) => logPlayHistory(info)); // Track completed audio
-```
-
-```typescript
-// Unsubscribe from audio completion events (removes ALL complete callbacks for the channel)
-offAudioComplete(channelNumber?);
-offAudioComplete(); // Stop receiving all completion notifications for default channel (0)
-offAudioComplete(1); // Stop receiving all completion notifications for channel 1
-```
-
-```typescript
-// Subscribe to audio pause events.
-onAudioPause(channelNumber, callback);
-onAudioPause(0, (info) => showPauseIcon(info)); // Show pause state in UI
-```
-
-```typescript
-// Unsubscribe from audio pause events (removes ALL pause callbacks for the channel)
-offAudioPause(channelNumber?);
-offAudioPause(); // Stop receiving all pause notifications for default channel (0)
-offAudioPause(1); // Stop receiving all pause notifications for channel 1
-```
-
-```typescript
-// Subscribe to audio resume events.
-onAudioResume(channelNumber, callback);
-onAudioResume(0, (info) => showPlayIcon(info)); // Show play state in UI
-```
-
-```typescript
-// Unsubscribe from audio resume events (removes ALL resume callbacks for the channel)
-offAudioResume(channelNumber?);
-offAudioResume(); // Stop receiving all resume notifications for default channel (0)
-offAudioResume(1); // Stop receiving all resume notifications for channel 1
-```
-
-### TypeScript Support
-If you cannot import audio files into your app, you may need a `custom.d.ts` file in the root directory. An example of one is shown here:
-
-`custom.d.ts`
-```typescript
-declare module '*.mp3' {
-  const src: string;
-  export default src;
-}
-```
-
-## Development & Contributing 🛠️
-
-The package uses a modular TypeScript architecture that makes it easy to contribute and extend:
-
-### Testing:
-The package includes a comprehensive test suite with 74+ tests covering all functionality:
+## Development
 
 ```bash
-# Run tests once
-npm test
-
-# Run tests in watch mode during development
-npm run test:watch
-
-# Run tests with coverage report
-npm run test:coverage
+npm install
+npm test               # unit tests
+npm run validate       # quick checks (format, lint, types, tests), also the pre-commit hook
+npm run validate:all   # every validation gate, with a report
 ```
+
+`npm run validate:all` runs 32 gates: formatting, lint, strict type checks, tests with per-file
+coverage, a test file for every source file, a test reference for every exported function and
+method, documentation for the whole public API, zero runtime dependencies, no circular imports,
+size limits, a public API snapshot, README examples that compile, changelog order, the build, both
+module formats, SSR-safe import, bundle size, and the published file list. Run
+`npm run validate:all -- --list` to see them all.
+
+Each run writes `.validation-reports/<timestamp>/report.md` (failing gates first, with every
+problem), `report.json`, and a log per gate. The newest 5 runs are kept. Other useful options:
+`--only=lint,build` and `--skip=bundle-size`.
+
+After changing the `AudioQueue` class, run `npm run generate` to regenerate the top-level
+functions, and `npm run api:update` if the public API changed on purpose.
+
+## License
+
+MIT

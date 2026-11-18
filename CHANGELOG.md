@@ -2,7 +2,75 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.0.0] - 2025-01-07
+## [3.0.0] - 2026-11-18
+
+A rewrite focused on correctness, small size and predictable behaviour. Most code using the
+top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the breaking changes.
+
+### Added
+- **`createAudioQueue(config)`**: independent queues with their own configuration (several
+  players on one page, isolated tests). The top-level functions use a lazily created default
+  queue, so importing audioq has no side effects and is safe during server-side rendering.
+- **Item handles**: `queueAudio` resolves to `{ id, src, channelNumber, started, finished }`.
+  `started` resolves `true`/`false`; `finished` resolves `'ended' | 'stopped' | 'error' |
+  'removed'`. Both always settle.
+- **Unsubscribe functions**: every `on*` function returns a function that removes just that
+  listener. Every `off*` function accepts an optional callback to remove only that one.
+- **Autoplay unlock**: when the browser blocks playback until the user interacts, the item stays
+  queued, one `AutoplayBlocked` error is reported, and playback starts on the next pointer or key
+  press. `unlockAudio()` does the same from your own handler.
+- **Load timeout** (`loadTimeoutMs`, default 15s): an item that never starts is skipped with a
+  `Timeout` error instead of stalling the channel forever.
+- **Prefetching** (`prefetchCount`, default 1): only the playing item and the next one are loaded;
+  later items are not downloaded until they are close to playing.
+- `AudioCompleteInfo.reason` (`'ended' | 'stopped' | 'error'`), `QueueItem.id`,
+  `AudioErrorType.AutoplayBlocked`, `crossOrigin` item option, `logger` and `maxChannels` config.
+- Dual ESM + CommonJS build with an `exports` map and `sideEffects: false` (tree-shakable).
+  About 10 KB gzipped, down from about 30 KB.
+- `npm run validate:all`: 32 validation gates with reports in `.validation-reports/`.
+
+### Fixed
+- Errors were handled twice per failure, scheduling duplicate retries; a failing *waiting* item
+  was played on top of the current one and could evict the healthy current item; retries kept
+  running after `stopAllAudio()`/`destroyChannel()` and could play audio after the user stopped it.
+- Sounds queued before the first user interaction were retried, then skipped, until the whole
+  queue was empty.
+- The `stalled` and `abort` events were treated as fatal and restarted the track from the start.
+- Subscribing to (or setting the volume of) a higher channel first, or destroying a channel,
+  left holes that made later `queueAudio` calls throw a `TypeError`. `NaN` or fractional channel
+  numbers threw `TypeError` instead of a clear `RangeError`.
+- Resuming during a fade-out left the channel paused, because the cancelled fade restarted itself.
+- With ducking configured, the priority sound waited for the duck fade before starting, and never
+  started in a background tab (requestAnimationFrame does not run there). Fades now use timers.
+- A per-item `volume` overwrote the channel volume; global volume was skipped for items with an
+  explicit volume; volume transitions on idle channels were dropped; channels that started while
+  ducking was active were not ducked.
+- On iOS, cross-origin audio without CORS headers played as silence (Web Audio routing is now used
+  only for same-origin sources or items with `crossOrigin` set).
+- A new `AudioContext` was created per channel and never closed. One shared context is now created
+  only when needed and closed by `destroyAllChannels()`.
+- Every queued item started downloading immediately; finished, stopped and removed items kept their
+  network and decoder resources (`destroyChannel` never actually released them).
+- `blob:` URLs, `data:audio` URIs, `../` paths and app schemes (`capacitor://`) were rejected by
+  the URL check. The check gave no protection (audio elements never execute script URLs).
+- File names in events were HTML-escaped (`rock &amp; roll.mp3` showed literally in React and Vue).
+- Changelog dates for 2.0.0, 1.4.0 and 1.6.0-1.12.0 corrected from the git history.
+
+### Removed (breaking)
+- Automatic retry system: `setRetryConfig`, `getRetryConfig`, `retryFailedAudio`,
+  `setErrorRecovery`, `getErrorRecovery` and the related types. Failed items are reported and
+  skipped; re-queue them from `onAudioError` if you want retries.
+- `audioChannels` (mutable internal state behind a Proxy).
+- Internal helpers: `validateAudioUrl`, `sanitizeForDisplay`, `cleanWebpackFilename`,
+  `createQueueSnapshot`, `getAudioInfoFromElement`, the Web Audio node functions
+  (`createWebAudioNodes`, `cleanupWebAudioNodes`, `getAudioContext`, `setWebAudioVolume`,
+  `getWebAudioVolume`, `resumeAudioContext`, `shouldUseWebAudio`), `setWebAudioConfig` and
+  `getWebAudioConfig` (use `setQueueConfig({ webAudio })` and `getWebAudioSupport()`),
+  `TimerType`, `GLOBAL_PROGRESS_KEY`.
+- `AudioErrorType.Permission` (blocked playback is now `AutoplayBlocked`).
+- The committed `dist/` folder.
+
+## [2.0.0] - 2026-01-07
 
 ### Changed
 - **BREAKING**: Package renamed from `audio-channel-queue` to `audioq`
@@ -29,7 +97,7 @@ All notable changes to this project will be documented in this file.
   - Volume changes and transitions now work properly on iOS browsers
   - Implemented fallback mechanisms for browsers with limited Web Audio API support
 
-## [1.12.0] - 2025-01-16
+## [1.12.0] - 2025-07-08
 
 ### Changed - Code Quality & Type Safety Improvements
 - **Volume Ducking Timing**: Updated ducking resume timing to match other audio timing operations for consistency
@@ -50,7 +118,7 @@ All notable changes to this project will be documented in this file.
   - **Reason**: API simplification - both functions did exactly the same thing
   - **No functionality lost**: `transitionVolume` provides all the same capabilities
 
-## [1.11.0] - 2025-01-16
+## [1.11.0] - 2025-07-02
 
 ### Added - Complete Event System API Coverage 🎵
 - **🎧 Missing Event Cleanup Functions**: Added complementing "off" functions for complete event management
@@ -77,7 +145,7 @@ All notable changes to this project will be documented in this file.
 - Added tests to validate the warning system for direct modification of channels
 - Removed set timeouts from testing
 
-## [1.10.0] - 2025-01-16
+## [1.10.0] - 2025-06-29
 
 ### Added - Advanced Queue Manipulation System 🎵
 - **🎛️ Queue Item Management**: Direct control over individual queue items
@@ -121,7 +189,7 @@ All notable changes to this project will be documented in this file.
   - Only audio element volumes are modified during ducking, preserving user-set channel volumes
 - **Priority Channel Ducking**: Fixed volume ducking logic for priority channels to preserve channel state consistency
 
-## [1.9.0] - 2025-01-16
+## [1.9.0] - 2025-06-21
 
 ### Changed - TypeScript Code Quality & Standards Implementation 🎯
   - Configuration defaults preserve `0` durations and empty configs
@@ -142,7 +210,7 @@ All notable changes to this project will be documented in this file.
 - **Progress callback typing**: Fixed type safety issues in global progress callback management
 - **Test compilation**: Resolved TypeScript compilation errors in test files
 
-## [1.8.0] - 2025-01-16
+## [1.8.0] - 2025-06-19
 
 ### Added - Enhanced Fade System & Type Safety Improvements 🎵
 - **🎛️ Improved Fade Types**: Enhanced fade options with consistent timing and better Linear support
@@ -166,7 +234,7 @@ All notable changes to this project will be documented in this file.
 - **Backward compatibility maintained** - existing string usage continues to work
 - **Enhanced TypeScript definitions** for all enum types and related interfaces
 
-## [1.7.0] - 2025-01-16
+## [1.7.0] - 2025-06-19
 
 ### Added - Comprehensive Error Handling & Recovery System 🚨
 - **🔧 Error Detection & Categorization**: Automatic error type classification
@@ -235,7 +303,7 @@ All notable changes to this project will be documented in this file.
 - **Code coupling issues**: Eliminated dependencies between production code and testing frameworks
 - **Export completeness**: All utility functions and types now properly exported from package
 
-## [1.6.0] - 2025-01-16
+## [1.6.0] - 2025-06-03
 
 ### Added - Major Feature Expansion 🚀
 - **⏯️ Pause/Resume System**: Complete playback control for individual channels and all channels
@@ -370,7 +438,7 @@ All notable changes to this project will be documented in this file.
 - **No breaking changes to public API** - all existing function calls remain the same
 - Import statements unchanged - the package automatically exports from the new modular structure
 
-## [1.4.0] - 2023-09-13
+## [1.4.0] - 2024-09-13
 
 ### Added
 - Implemented Jest and Jest Testing

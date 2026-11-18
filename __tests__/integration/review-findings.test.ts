@@ -1,0 +1,266 @@
+/**
+ * @fileoverview Regression tests for every issue found in the v2 adversarial review (F1-F11).
+ * In v2 each of these scenarios misbehaved; each test asserts the fixed behaviour.
+ */
+import { createAudioQueue } from '../../src/audio-queue';
+import type { AudioQueue } from '../../src/audio-queue';
+import { AudioErrorType, FadeType } from '../../src/types';
+import type { QueueConfig } from '../../src/types';
+import {
+  DESKTOP_UA,
+  FakeAudio,
+  FakeAudioContext,
+  IPHONE_UA,
+  advance,
+  audioAt,
+  flush,
+  installFakeAudio,
+  installFakeAudioContext,
+  removeAudioContext,
+  setUserAgent
+} from '../helpers/fake-audio';
+
+const setup = (config: Partial<QueueConfig> = {}): AudioQueue =>
+  createAudioQueue({ logger: null, ...config });
+
+beforeEach(() => {
+  jest.useFakeTimers();
+  installFakeAudio();
+  removeAudioContext();
+  setUserAgent(DESKTOP_UA);
+});
+
+afterEach(() => jest.useRealTimers());
+
+describe('F1: channel bookkeeping never crashes', () => {
+  test('subscribing on channel 1 before using channel 0', async () => {
+    const queue = setup();
+    queue.onAudioStart(1, jest.fn());
+    await expect(queue.queueAudio('/a.mp3', 0)).resolves.toBeDefined();
+  });
+
+  test('setting volume on channel 2 before using channel 0', async () => {
+    const queue = setup();
+    await queue.setChannelVolume(2, 0.5);
+    await expect(queue.queueAudio('/a.mp3', 0)).resolves.toBeDefined();
+  });
+
+  test('re-queueing on a destroyed channel', async () => {
+    const queue = setup();
+    queue.onAudioError(1, jest.fn());
+    await queue.destroyChannel(0);
+    await expect(queue.queueAudio('/a.mp3', 0)).resolves.toBeDefined();
+  });
+
+  test('NaN and fractional channels are rejected with a clear RangeError', async () => {
+    const queue = setup();
+    await expect(queue.queueAudio('/a.mp3', NaN)).rejects.toThrow(RangeError);
+    await expect(queue.queueAudio('/a.mp3', 1.5)).rejects.toThrow(RangeError);
+  });
+});
+
+describe('F2: legitimate sources are accepted', () => {
+  test.each([
+    'blob:http://localhost/9b1c-uuid',
+    '../sounds/beep.mp3',
+    'data:audio/wav;base64,UklGRiQAAABXQVZF',
+    'capacitor://localhost/beep.mp3'
+  ])('%s', async (url) => {
+    await expect(setup().queueAudio(url)).resolves.toBeDefined();
+  });
+});
+
+describe('F3: file names are plain text', () => {
+  test('no HTML entities in event payloads', async () => {
+    const queue = setup();
+    const names: string[] = [];
+    queue.onQueueChange(0, (s) => names.push(s.items[0]?.fileName ?? ''));
+    await queue.queueAudio('rock%20%26%20roll.mp3');
+    expect(names[0]).toBe('rock & roll.mp3');
+  });
+});
+
+describe('F4: one failure, one report; autoplay blocking keeps the queue', () => {
+  test('a blocked play() is reported exactly once', async () => {
+    FakeAudio.defaultPlayBehavior = 'not-allowed';
+    const queue = setup();
+    const errors = jest.fn();
+    queue.onAudioError(0, errors);
+    await queue.queueAudio('/a.mp3');
+    await advance(60000, 1000);
+    expect(errors).toHaveBeenCalledTimes(1);
+  });
+
+  test('sounds queued before a user gesture survive and play after it', async () => {
+    FakeAudio.defaultPlayBehavior = 'not-allowed';
+    const queue = setup();
+    for (const n of ['a', 'b', 'c', 'd']) await queue.queueAudio(`/${n}.mp3`);
+    await advance(400000, 10000);
+    expect(queue.getQueueLength()).toBe(4);
+    FakeAudio.defaultPlayBehavior = 'resolve';
+    document.dispatchEvent(new Event('pointerdown'));
+    await flush();
+    expect(queue.getCurrentAudioInfo()?.isPlaying).toBe(true);
+  });
+});
+
+describe('F5: a failing waiting item cannot hijack the channel', () => {
+  test('it is never played and the current item is never evicted', async () => {
+    const queue = setup();
+    await queue.queueAudio('/one.mp3');
+    await queue.queueAudio('/two.mp3');
+    await flush();
+    const [one, two] = [audioAt(0), audioAt(1)];
+    two.playBehavior = 'not-supported';
+    two.fail(4);
+    await advance(100000, 10000);
+    expect(two.playCalls).toBe(0);
+    expect(one.paused).toBe(false);
+    expect(queue.getQueueSnapshot()?.items.map((i) => i.fileName)).toEqual(['one.mp3']);
+  });
+});
+
+describe('F6: nothing plays after stop', () => {
+  test('a failed item does not come back after stopAllAudio', async () => {
+    const queue = setup();
+    await queue.queueAudio('/a.mp3');
+    const audio = audioAt(0);
+    audio.fail(2, 'network error');
+    await queue.stopAllAudio();
+    const plays = audio.playCalls;
+    await advance(100000, 10000);
+    expect(audio.playCalls).toBe(plays);
+    expect(audio.paused).toBe(true);
+  });
+});
+
+describe('F7: a network stall is not an error', () => {
+  test('stalled does not restart or skip the track', async () => {
+    const queue = setup();
+    const errors = jest.fn();
+    queue.onAudioError(0, errors);
+    await queue.queueAudio('/a.mp3');
+    await flush();
+    const audio = audioAt(0);
+    audio.currentTime = 5;
+    audio.fire('stalled');
+    await advance(10000, 1000);
+    expect(audio.loadCalls).toBe(0);
+    expect(errors).not.toHaveBeenCalled();
+    expect(queue.getQueueLength()).toBe(1);
+  });
+});
+
+describe('F8: no hangs and no zombie fades', () => {
+  test('pause-with-fade then resume-with-fade mid-fade leaves the audio playing', async () => {
+    const queue = setup();
+    await queue.queueAudio('/a.mp3');
+    await flush();
+    const pause = queue.pauseWithFade(FadeType.Linear, 0, 400);
+    await advance(50);
+    const resume = queue.resumeWithFade(FadeType.Linear, 0, 400);
+    await advance(1600);
+    await Promise.all([pause, resume]);
+    expect(audioAt(0).paused).toBe(false);
+    expect(queue.isChannelPaused(0)).toBe(false);
+  });
+
+  test('ducking does not delay the priority sound, even with timers throttled', async () => {
+    const queue = setup();
+    queue.setVolumeDucking({ duckingVolume: 0.2, priorityChannel: 1, priorityVolume: 1 });
+    await queue.queueAudio('/music.mp3', 0);
+    await queue.queueAudio('/notify.mp3', 1);
+    expect(audioAt(1).playCalls).toBe(1);
+  });
+
+  test('an item that never loads is skipped after loadTimeoutMs', async () => {
+    FakeAudio.defaultPlayBehavior = 'hang';
+    const queue = setup({ loadTimeoutMs: 15000 });
+    const item = await queue.queueAudio('/a.mp3');
+    await advance(16000, 1000);
+    await expect(item.finished).resolves.toBe('error');
+  });
+});
+
+describe('F9: volume factors are independent', () => {
+  test('per-item volume does not change the channel volume', async () => {
+    const queue = setup();
+    await queue.setChannelVolume(0, 0.8);
+    await queue.queueAudio('/quiet.mp3', 0, { volume: 0.1 });
+    expect(queue.getChannelVolume(0)).toBe(0.8);
+  });
+
+  test('global volume applies to items with an explicit volume', async () => {
+    const queue = setup();
+    await queue.setGlobalVolume(0.5);
+    await queue.queueAudio('/a.mp3', 0, { volume: 0.4 });
+    expect(audioAt(0).volume).toBeCloseTo(0.2);
+  });
+
+  test('a volume transition on an idle channel is applied', async () => {
+    const queue = setup();
+    queue.onQueueChange(0, jest.fn());
+    const done = queue.setChannelVolume(0, 0.3, 200);
+    await advance(300);
+    await done;
+    expect(queue.getChannelVolume(0)).toBeCloseTo(0.3);
+  });
+});
+
+describe('F10: listeners are independent', () => {
+  test('removing one component listener keeps the others', async () => {
+    const queue = setup();
+    const a = jest.fn();
+    const b = jest.fn();
+    const unsubscribeA = queue.onQueueChange(0, a);
+    queue.onQueueChange(0, b);
+    unsubscribeA();
+    await queue.queueAudio('/x.mp3');
+    expect(b).toHaveBeenCalled();
+    expect(a).not.toHaveBeenCalled();
+  });
+});
+
+describe('F11: resource use is bounded', () => {
+  test('a long queue creates only the elements it needs', async () => {
+    const queue = setup();
+    for (let i = 0; i < 50; i++) await queue.queueAudio(`/t${i}.mp3`);
+    expect(FakeAudio.instances.length).toBe(2);
+  });
+
+  test('finished items release their media', async () => {
+    const queue = setup();
+    await queue.queueAudio('/a.mp3');
+    await flush();
+    const audio = audioAt(0);
+    audio.finish();
+    await flush();
+    expect(audio.src).toBe('');
+    expect(audio.loadCalls).toBe(1);
+  });
+
+  test('one AudioContext is shared by all channels', async () => {
+    installFakeAudioContext();
+    const queue = setup({ webAudio: 'force' });
+    for (let channel = 0; channel < 5; channel++) await queue.queueAudio('/a.mp3', channel);
+    expect(FakeAudioContext.instances).toHaveLength(1);
+  });
+
+  test('iOS cross-origin audio without CORS is not routed into silence', async () => {
+    installFakeAudioContext();
+    setUserAgent(IPHONE_UA);
+    const queue = setup();
+    await queue.queueAudio('https://cdn.example.com/a.mp3');
+    expect(FakeAudioContext.instances).toHaveLength(0);
+  });
+
+  test('errors are classified from the browser error name, not message text', async () => {
+    FakeAudio.defaultPlayBehavior = 'not-allowed';
+    const queue = setup();
+    const errors = jest.fn();
+    queue.onAudioError(0, errors);
+    await queue.queueAudio('/a.mp3');
+    await flush();
+    expect(errors.mock.calls[0]?.[0].errorType).toBe(AudioErrorType.AutoplayBlocked);
+  });
+});

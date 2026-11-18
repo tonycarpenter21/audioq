@@ -1,687 +1,181 @@
-/**
- * @fileoverview Tests for Web Audio API support functionality
- */
-
 import {
+  WebAudioEngine,
+  describeWebAudioSupport,
+  getAudioContextClass,
   isIOSDevice,
   isWebAudioSupported,
-  shouldUseWebAudio,
-  getWebAudioSupport,
-  setWebAudioConfig,
-  getWebAudioConfig,
-  getAudioContext,
-  createWebAudioNodes,
-  setWebAudioVolume,
-  getWebAudioVolume,
-  resumeAudioContext,
-  cleanupWebAudioNodes
+  shouldUseWebAudio
 } from '../src/web-audio';
-import { WebAudioConfig, WebAudioSupport, WebAudioNodeSet } from '../src/types';
+import {
+  DESKTOP_UA,
+  FakeAudio,
+  FakeAudioContext,
+  IPHONE_UA,
+  flush,
+  installFakeAudioContext,
+  removeAudioContext,
+  setUserAgent
+} from './helpers/fake-audio';
 
-// Type definitions for mocks
-interface MockAudioContext {
-  createGain: jest.Mock;
-  createMediaElementSource: jest.Mock;
-  currentTime: number;
-  destination: Record<string, unknown>;
-  resume: jest.Mock;
-  state: string;
-}
-
-interface MockAudioElement {
-  pause: jest.Mock;
-  play: jest.Mock;
-  src: string;
-  volume: number;
-}
-
-interface MockAudioParam {
-  cancelScheduledValues: jest.Mock;
-  linearRampToValueAtTime: jest.Mock;
-  setValueAtTime: jest.Mock;
-  value: number;
-}
-
-interface MockGainNode {
-  connect: jest.Mock;
-  context: MockAudioContext;
-  disconnect: jest.Mock;
-  gain: MockAudioParam;
-}
-
-interface MockGlobalThis {
-  AudioContext?: jest.Mock;
-  webkitAudioContext?: jest.Mock;
-  window?: {
-    AudioContext?: jest.Mock;
-    webkitAudioContext?: jest.Mock;
-  };
-}
-
-interface MockSourceNode {
-  connect: jest.Mock;
-  disconnect: jest.Mock;
-}
-
-// Mock global objects for testing
-const mockAudioContext: MockAudioContext = {
-  createGain: jest.fn(),
-  createMediaElementSource: jest.fn(),
-  currentTime: 0,
-  destination: {},
-  resume: jest.fn().mockResolvedValue(undefined),
-  state: 'running'
-};
-
-const mockGainNode: MockGainNode = {
-  connect: jest.fn(),
-  context: mockAudioContext,
-  disconnect: jest.fn(),
-  gain: {
-    cancelScheduledValues: jest.fn(),
-    linearRampToValueAtTime: jest.fn(),
-    setValueAtTime: jest.fn(),
-    value: 1.0
-  }
-};
-
-const mockSourceNode: MockSourceNode = {
-  connect: jest.fn(),
-  disconnect: jest.fn()
-};
-
-const mockAudio: MockAudioElement = {
-  pause: jest.fn(),
-  play: jest.fn().mockResolvedValue(undefined),
-  src: 'test.mp3',
-  volume: 1.0
-};
-
-// Mock navigator for iOS detection tests
-const originalNavigator = global.navigator;
+const element = (): HTMLAudioElement => new FakeAudio('/a.mp3') as unknown as HTMLAudioElement;
 
 beforeEach(() => {
-  jest.clearAllMocks();
-
-  // Reset Web Audio API configuration
-  setWebAudioConfig({
-    autoDetectIOS: true,
-    enabled: true,
-    forceWebAudio: false
-  });
-
-  // Setup default AudioContext mock
-  mockAudioContext.createMediaElementSource.mockReturnValue(mockSourceNode);
-  mockAudioContext.createGain.mockReturnValue(mockGainNode);
-
-  // Mock global AudioContext
-  (global as unknown as MockGlobalThis).AudioContext = jest.fn(() => mockAudioContext);
-  (global as unknown as MockGlobalThis).webkitAudioContext = jest.fn(() => mockAudioContext);
-
-  // Mock window object
-  (global as unknown as MockGlobalThis).window = {
-    AudioContext: (global as unknown as MockGlobalThis).AudioContext,
-    webkitAudioContext: (global as unknown as MockGlobalThis).webkitAudioContext
-  };
+  installFakeAudioContext();
+  setUserAgent(DESKTOP_UA);
 });
 
-afterEach(() => {
-  // Restore original navigator
-  Object.defineProperty(global, 'navigator', {
-    value: originalNavigator,
-    writable: true
-  });
+afterEach(() => removeAudioContext());
 
-  // Clean up global mocks
-  delete (global as unknown as MockGlobalThis).AudioContext;
-  delete (global as unknown as MockGlobalThis).webkitAudioContext;
-  delete (global as unknown as MockGlobalThis).window;
-});
-
-describe('iOS Device Detection', () => {
-  it('should detect iPad as iOS device', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
+describe('isIOSDevice', () => {
+  test('detects iPhone', () => {
+    setUserAgent(IPHONE_UA);
     expect(isIOSDevice()).toBe(true);
   });
 
-  it('should detect iPhone as iOS device', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
+  test('detects iPadOS reporting as a Mac with touch', () => {
+    setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 5);
     expect(isIOSDevice()).toBe(true);
   });
 
-  it('should detect iPod as iOS device', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPod touch; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
-    expect(isIOSDevice()).toBe(true);
-  });
-
-  it('should detect modern iPad (MacIntel with touch) as iOS', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        maxTouchPoints: 2,
-        userAgent:
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Safari/605.1.15'
-      },
-      writable: true
-    });
-
-    expect(isIOSDevice()).toBe(true);
-  });
-
-  it('should not detect Mac as iOS device', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        maxTouchPoints: 0,
-        userAgent:
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      writable: true
-    });
-
+  test('desktop is not iOS', () => {
+    expect(isIOSDevice()).toBe(false);
+    setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 0);
     expect(isIOSDevice()).toBe(false);
   });
 
-  it('should not detect Windows as iOS device', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      writable: true
-    });
-
-    expect(isIOSDevice()).toBe(false);
-  });
-
-  it('should return false when navigator is undefined', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: undefined,
-      writable: true
-    });
-
-    expect(isIOSDevice()).toBe(false);
-  });
-});
-
-describe('Web Audio API Support Detection', () => {
-  it('should detect Web Audio API support when AudioContext is available', () => {
-    expect(isWebAudioSupported()).toBe(true);
-  });
-
-  it('should detect Web Audio API support when webkitAudioContext is available', () => {
-    delete (global as unknown as MockGlobalThis).AudioContext;
-    (global as unknown as MockGlobalThis).webkitAudioContext = jest.fn();
-
-    expect(isWebAudioSupported()).toBe(true);
-  });
-
-  it('should return false when neither AudioContext nor webkitAudioContext is available', () => {
-    delete (global as unknown as MockGlobalThis).AudioContext;
-    delete (global as unknown as MockGlobalThis).webkitAudioContext;
-    delete (global as unknown as MockGlobalThis).window;
-
-    expect(isWebAudioSupported()).toBe(false);
-  });
-});
-
-describe('Web Audio API Usage Decision', () => {
-  it('should use Web Audio API when forced via configuration', () => {
-    setWebAudioConfig({ forceWebAudio: true });
-
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      writable: true
-    });
-
-    expect(shouldUseWebAudio()).toBe(true);
-  });
-
-  it('should use Web Audio API on iOS devices when auto-detection is enabled', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
-    expect(shouldUseWebAudio()).toBe(true);
-  });
-
-  it('should not use Web Audio API on non-iOS devices by default', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      writable: true
-    });
-
-    expect(shouldUseWebAudio()).toBe(false);
-  });
-
-  it('should not use Web Audio API when disabled in configuration', () => {
-    setWebAudioConfig({ enabled: false });
-
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
-    expect(shouldUseWebAudio()).toBe(false);
-  });
-
-  it('should not use Web Audio API when not supported', () => {
-    delete (global as unknown as MockGlobalThis).AudioContext;
-    delete (global as unknown as MockGlobalThis).webkitAudioContext;
-    delete (global as unknown as MockGlobalThis).window;
-
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
-    expect(shouldUseWebAudio()).toBe(false);
-  });
-
-  it('should not use Web Audio API on iOS when auto-detection is disabled', () => {
-    setWebAudioConfig({ autoDetectIOS: false });
-
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
-    expect(shouldUseWebAudio()).toBe(false);
-  });
-});
-
-describe('Web Audio API Support Information', () => {
-  it('should provide correct support information for iOS device', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 ' +
-          '(KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
-      },
-      writable: true
-    });
-
-    const support: WebAudioSupport = getWebAudioSupport();
-
-    expect(support.available).toBe(true);
-    expect(support.isIOS).toBe(true);
-    expect(support.usingWebAudio).toBe(true);
-    expect(support.reason).toBe('iOS device detected - using Web Audio API for volume control');
-  });
-
-  it('should provide correct support information for non-iOS device', () => {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      writable: true
-    });
-
-    const support: WebAudioSupport = getWebAudioSupport();
-
-    expect(support.available).toBe(true);
-    expect(support.isIOS).toBe(false);
-    expect(support.usingWebAudio).toBe(false);
-    expect(support.reason).toBe('Using standard HTMLAudioElement volume control');
-  });
-
-  it('should provide correct support information when Web Audio API is disabled', () => {
-    setWebAudioConfig({ enabled: false });
-
-    const support: WebAudioSupport = getWebAudioSupport();
-
-    expect(support.available).toBe(true);
-    expect(support.usingWebAudio).toBe(false);
-    expect(support.reason).toBe('Web Audio API disabled in configuration');
-  });
-
-  it('should provide correct support information when Web Audio API is not available', () => {
-    delete (global as unknown as MockGlobalThis).AudioContext;
-    delete (global as unknown as MockGlobalThis).webkitAudioContext;
-    delete (global as unknown as MockGlobalThis).window;
-
-    const support: WebAudioSupport = getWebAudioSupport();
-
-    expect(support.available).toBe(false);
-    expect(support.usingWebAudio).toBe(false);
-    expect(support.reason).toBe('Web Audio API not supported in this environment');
-  });
-
-  it('should provide correct support information when forced', () => {
-    setWebAudioConfig({ forceWebAudio: true });
-
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      writable: true
-    });
-
-    const support: WebAudioSupport = getWebAudioSupport();
-
-    expect(support.available).toBe(true);
-    expect(support.isIOS).toBe(false);
-    expect(support.usingWebAudio).toBe(true);
-    expect(support.reason).toBe('Web Audio API forced via configuration');
-  });
-});
-
-describe('Web Audio API Configuration', () => {
-  it('should set and get Web Audio API configuration', () => {
-    const config: Partial<WebAudioConfig> = {
-      autoDetectIOS: false,
-      enabled: false,
-      forceWebAudio: true
-    };
-
-    setWebAudioConfig(config);
-    const result = getWebAudioConfig();
-
-    expect(result.enabled).toBe(false);
-    expect(result.forceWebAudio).toBe(true);
-    expect(result.autoDetectIOS).toBe(false);
-  });
-
-  it('should merge configuration with existing values', () => {
-    setWebAudioConfig({ enabled: false });
-    setWebAudioConfig({ forceWebAudio: true });
-
-    const result = getWebAudioConfig();
-
-    expect(result.enabled).toBe(false);
-    expect(result.forceWebAudio).toBe(true);
-    expect(result.autoDetectIOS).toBe(true); // Should remain default
-  });
-});
-
-describe('AudioContext Management', () => {
-  it('should create AudioContext successfully', () => {
-    const context = getAudioContext();
-
-    expect(context).toBe(mockAudioContext);
-    expect((global as unknown as MockGlobalThis).AudioContext).toHaveBeenCalled();
-  });
-
-  it('should use webkitAudioContext as fallback', () => {
-    delete (global as unknown as MockGlobalThis).AudioContext;
-    const globalThis = global as unknown as MockGlobalThis;
-    globalThis.window = { webkitAudioContext: globalThis.webkitAudioContext };
-
-    const context = getAudioContext();
-
-    expect(context).toBe(mockAudioContext);
-    expect((global as unknown as MockGlobalThis).webkitAudioContext).toHaveBeenCalled();
-  });
-
-  it('should return null when Web Audio API is not supported', () => {
-    delete (global as unknown as MockGlobalThis).AudioContext;
-    delete (global as unknown as MockGlobalThis).webkitAudioContext;
-    delete (global as unknown as MockGlobalThis).window;
-
-    const context = getAudioContext();
-
-    expect(context).toBe(null);
-  });
-
-  it('should handle AudioContext creation errors', () => {
-    const throwingAudioContext = jest.fn(() => {
-      throw new Error('AudioContext creation failed');
-    });
-
-    (global as unknown as MockGlobalThis).AudioContext = throwingAudioContext;
-    (global as unknown as MockGlobalThis).window = {
-      AudioContext: throwingAudioContext,
-      webkitAudioContext: throwingAudioContext
-    };
-
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    const context = getAudioContext();
-
-    expect(context).toBe(null);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to create AudioContext:',
-      expect.any(Error)
-    );
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('should resume suspended AudioContext', async () => {
-    mockAudioContext.state = 'suspended';
-
-    await resumeAudioContext(mockAudioContext as unknown as AudioContext);
-
-    expect(mockAudioContext.resume).toHaveBeenCalled();
-  });
-
-  it('should not resume running AudioContext', async () => {
-    mockAudioContext.state = 'running';
-
-    await resumeAudioContext(mockAudioContext as unknown as AudioContext);
-
-    expect(mockAudioContext.resume).not.toHaveBeenCalled();
-  });
-
-  it('should handle AudioContext resume errors', async () => {
-    mockAudioContext.state = 'suspended';
-    mockAudioContext.resume.mockRejectedValue(new Error('Resume failed'));
-
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    await resumeAudioContext(mockAudioContext as unknown as AudioContext);
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to resume AudioContext:',
-      expect.any(Error)
-    );
-
-    consoleErrorSpy.mockRestore();
-  });
-});
-
-describe('Web Audio Node Management', () => {
-  it('should create Web Audio nodes successfully', () => {
-    const nodes = createWebAudioNodes(
-      mockAudio as unknown as HTMLAudioElement,
-      mockAudioContext as unknown as AudioContext
-    );
-
-    expect(nodes).toEqual({
-      gainNode: mockGainNode,
-      sourceNode: mockSourceNode
-    });
-
-    expect(mockAudioContext.createMediaElementSource).toHaveBeenCalledWith(mockAudio);
-    expect(mockAudioContext.createGain).toHaveBeenCalled();
-    expect(mockSourceNode.connect).toHaveBeenCalledWith(mockGainNode);
-    expect(mockGainNode.connect).toHaveBeenCalledWith(mockAudioContext.destination);
-  });
-
-  it('should return null when node creation fails', () => {
-    mockAudioContext.createMediaElementSource.mockImplementation(() => {
-      throw new Error('Node creation failed');
-    });
-
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    const nodes = createWebAudioNodes(
-      mockAudio as unknown as HTMLAudioElement,
-      mockAudioContext as unknown as AudioContext
-    );
-
-    expect(nodes).toBe(null);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Failed to create Web Audio nodes:',
-      expect.any(Error)
-    );
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('should clean up Web Audio nodes', () => {
-    const nodes: WebAudioNodeSet = {
-      gainNode: mockGainNode as unknown as GainNode,
-      sourceNode: mockSourceNode as unknown as MediaElementAudioSourceNode
-    };
-
-    cleanupWebAudioNodes(nodes);
-
-    expect(mockSourceNode.disconnect).toHaveBeenCalled();
-    expect(mockGainNode.disconnect).toHaveBeenCalled();
-  });
-
-  it('should handle cleanup errors gracefully', () => {
-    const nodes: WebAudioNodeSet = {
-      gainNode: mockGainNode as unknown as GainNode,
-      sourceNode: mockSourceNode as unknown as MediaElementAudioSourceNode
-    };
-
-    mockSourceNode.disconnect.mockImplementation(() => {
-      throw new Error('Disconnect failed');
-    });
-
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    cleanupWebAudioNodes(nodes);
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Error during Web Audio cleanup:',
-      expect.any(Error)
-    );
-
-    consoleErrorSpy.mockRestore();
-  });
-});
-
-describe('Web Audio Volume Control', () => {
-  beforeEach(() => {
-    mockGainNode.gain.value = 1.0;
-    jest.clearAllMocks();
-  });
-
-  it('should set volume instantly without transition', () => {
-    setWebAudioVolume(mockGainNode as unknown as GainNode, 0.5);
-
-    expect(mockGainNode.gain.cancelScheduledValues).toHaveBeenCalledWith(0);
-    expect(mockGainNode.gain.value).toBe(0.5);
-    expect(mockGainNode.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
-  });
-
-  it('should set volume with smooth transition', () => {
-    setWebAudioVolume(mockGainNode as unknown as GainNode, 0.3, 500);
-
-    expect(mockGainNode.gain.cancelScheduledValues).toHaveBeenCalledWith(0);
-    expect(mockGainNode.gain.setValueAtTime).toHaveBeenCalledWith(1.0, 0);
-    expect(mockGainNode.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.3, 0.5);
-  });
-
-  it('should clamp volume to valid range (0-1)', () => {
-    setWebAudioVolume(mockGainNode as unknown as GainNode, 1.5);
-    expect(mockGainNode.gain.value).toBe(1);
-
-    setWebAudioVolume(mockGainNode as unknown as GainNode, -0.5);
-    expect(mockGainNode.gain.value).toBe(0);
-  });
-
-  it('should get current volume from gain node', () => {
-    mockGainNode.gain.value = 0.7;
-
-    const volume = getWebAudioVolume(mockGainNode as unknown as GainNode);
-
-    expect(volume).toBe(0.7);
-  });
-
-  it('should handle zero duration as instant transition', () => {
-    setWebAudioVolume(mockGainNode as unknown as GainNode, 0.2, 0);
-
-    expect(mockGainNode.gain.value).toBe(0.2);
-    expect(mockGainNode.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
-  });
-
-  it('should handle negative duration as instant transition', () => {
-    setWebAudioVolume(mockGainNode as unknown as GainNode, 0.8, -100);
-
-    expect(mockGainNode.gain.value).toBe(0.8);
-    expect(mockGainNode.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
-  });
-});
-
-describe('Integration with HTML Audio Element', () => {
-  it('should work with real HTML audio element properties', () => {
-    const audio = mockAudio as unknown as HTMLAudioElement;
-    const context = mockAudioContext as unknown as AudioContext;
-
-    const nodes = createWebAudioNodes(audio, context);
-
-    expect(nodes).not.toBe(null);
-    if (nodes) {
-      expect(mockAudioContext.createMediaElementSource).toHaveBeenCalledWith(audio);
+  test('is false without navigator', () => {
+    const original = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: undefined });
+    try {
+      expect(isIOSDevice()).toBe(false);
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', { configurable: true, value: original });
     }
   });
+});
 
-  it('should maintain audio element functionality after Web Audio setup', () => {
-    const audio = mockAudio as unknown as HTMLAudioElement;
-    const context = mockAudioContext as unknown as AudioContext;
+describe('support detection', () => {
+  test('getAudioContextClass prefers AudioContext and falls back to webkitAudioContext', () => {
+    expect(getAudioContextClass()).toBe(FakeAudioContext);
+    removeAudioContext();
+    expect(getAudioContextClass()).toBeUndefined();
+    (globalThis as { webkitAudioContext?: unknown }).webkitAudioContext = FakeAudioContext;
+    expect(getAudioContextClass()).toBe(FakeAudioContext);
+  });
 
-    createWebAudioNodes(audio, context);
+  test('isWebAudioSupported follows the globals', () => {
+    expect(isWebAudioSupported()).toBe(true);
+    removeAudioContext();
+    expect(isWebAudioSupported()).toBe(false);
+  });
 
-    // Audio element should still be functional
-    expect(audio.src).toBe('test.mp3');
-    expect(audio.volume).toBe(1.0);
-    expect(typeof audio.play).toBe('function');
-    expect(typeof audio.pause).toBe('function');
+  test('shouldUseWebAudio: off never, force always, auto only on iOS', () => {
+    expect(shouldUseWebAudio('off')).toBe(false);
+    expect(shouldUseWebAudio('force')).toBe(true);
+    expect(shouldUseWebAudio('auto')).toBe(false);
+    setUserAgent(IPHONE_UA);
+    expect(shouldUseWebAudio('auto')).toBe(true);
+    removeAudioContext();
+    expect(shouldUseWebAudio('force')).toBe(false);
+  });
+
+  test.each([
+    ['off', DESKTOP_UA, true, /disabled/],
+    ['force', DESKTOP_UA, true, /forced/],
+    ['auto', IPHONE_UA, true, /iOS detected/],
+    ['auto', DESKTOP_UA, true, /HTMLAudioElement volume/],
+    ['auto', DESKTOP_UA, false, /not available/]
+  ] as const)('describeWebAudioSupport(%s) explains itself', (mode, ua, available, reason) => {
+    setUserAgent(ua);
+    if (!available) removeAudioContext();
+    const support = describeWebAudioSupport(mode);
+    expect(support.available).toBe(available);
+    expect(support.reason).toMatch(reason);
+    expect(support.usingWebAudio).toBe(shouldUseWebAudio(mode));
+  });
+});
+
+describe('WebAudioEngine', () => {
+  test('creates one shared context lazily for many elements', () => {
+    const engine = new WebAudioEngine();
+    expect(FakeAudioContext.instances).toHaveLength(0);
+    const a = engine.connect(element(), 0.5);
+    const b = engine.connect(element(), 1);
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    expect(a?.gain.gain.value).toBe(0.5);
+    expect(b?.gain.gain.value).toBe(1);
+    expect(a?.source.connect).toHaveBeenCalledWith(a?.gain);
+  });
+
+  test('resumes a suspended context when connecting', async () => {
+    const engine = new WebAudioEngine();
+    engine.connect(element(), 1);
+    const context = FakeAudioContext.instances[0] as FakeAudioContext;
+    expect(context.resume).toHaveBeenCalled();
+    await flush();
+    engine.resume();
+    expect(context.resume).toHaveBeenCalledTimes(1);
+  });
+
+  test('resume swallows rejections', async () => {
+    const engine = new WebAudioEngine();
+    engine.connect(element(), 1);
+    const context = FakeAudioContext.instances[0] as FakeAudioContext;
+    context.state = 'suspended';
+    context.resume.mockRejectedValueOnce(new Error('needs gesture'));
+    expect(() => engine.resume()).not.toThrow();
+    await flush();
+  });
+
+  test('connect returns undefined when there is no Web Audio or node creation fails', () => {
+    const engine = new WebAudioEngine();
+    FakeAudioContext.failSourceCreation = true;
+    expect(engine.connect(element(), 1)).toBeUndefined();
+    removeAudioContext();
+    expect(new WebAudioEngine().connect(element(), 1)).toBeUndefined();
+  });
+
+  test('connect returns undefined when the context constructor throws', () => {
+    (globalThis as { AudioContext?: unknown }).AudioContext = class {
+      constructor() {
+        throw new Error('too many contexts');
+      }
+    };
+    expect(new WebAudioEngine().connect(element(), 1)).toBeUndefined();
+  });
+
+  test('setGain cancels scheduled ramps and sets the value', () => {
+    const engine = new WebAudioEngine();
+    const route = engine.connect(element(), 1);
+    if (!route) throw new Error('expected a route');
+    engine.setGain(route, 0.25);
+    expect(route.gain.gain.value).toBe(0.25);
+    expect(
+      (route.gain.gain as unknown as { cancelScheduledValues: jest.Mock }).cancelScheduledValues
+    ).toHaveBeenCalled();
+  });
+
+  test('disconnect detaches both nodes and tolerates repeated calls', () => {
+    const engine = new WebAudioEngine();
+    const route = engine.connect(element(), 1);
+    if (!route) throw new Error('expected a route');
+    engine.disconnect(route);
+    expect(route.source.disconnect).toHaveBeenCalled();
+    expect(route.gain.disconnect).toHaveBeenCalled();
+    (route.source.disconnect as jest.Mock).mockImplementation(() => {
+      throw new Error('already');
+    });
+    expect(() => engine.disconnect(route)).not.toThrow();
+  });
+
+  test('close closes the context; the next connect creates a new one', () => {
+    const engine = new WebAudioEngine();
+    engine.connect(element(), 1);
+    const first = FakeAudioContext.instances[0] as FakeAudioContext;
+    engine.close();
+    expect(first.close).toHaveBeenCalled();
+    engine.close();
+    engine.connect(element(), 1);
+    expect(FakeAudioContext.instances).toHaveLength(2);
   });
 });

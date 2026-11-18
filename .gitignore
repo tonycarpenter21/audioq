@@ -1,9 +1,7 @@
 /node_modules
-/node_modules/*
-
-# Coverage reports
+/dist
 /coverage
-/coverage/*
+/.validation-reports
 
 # Cursor IDE rules file
 .cursorrules

@@ -1,25 +1,20 @@
+/** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'jsdom',
-  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
-  testMatch: [
-    '<rootDir>/__tests__/**/*.test.ts'
-  ],
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-  ],
-  coverageDirectory: 'coverage',
-  coverageReporters: [
-    'text',
-    'lcov',
-    'html'
-  ],
-  coveragePathIgnorePatterns: [
-    '/node_modules/',
-    'src/index.ts'
-  ],
+  roots: ['<rootDir>/__tests__'],
+  testMatch: ['**/*.test.ts'],
+  transform: {
+    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }]
+  },
+  // Source imports use .js extensions (required for Node ESM); map them back to the .ts files.
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1'
+    '^(\\.{1,2}/.*)\\.js$': '$1'
+  },
+  restoreMocks: true,
+  collectCoverageFrom: ['src/**/*.ts'],
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text-summary', 'json-summary', 'lcov'],
+  coverageThreshold: {
+    global: { branches: 90, functions: 95, lines: 95, statements: 95 }
   }
 };

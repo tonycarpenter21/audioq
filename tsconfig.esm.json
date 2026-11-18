@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist/esm",
+    "declaration": false,
+    "removeComments": true,
+    "sourceMap": false
+  },
+  "include": ["src/**/*"]
+}
