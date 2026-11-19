@@ -17,6 +17,9 @@ module.exports = {
     '**/__tests__/audio-queue*.test.ts',
     '**/__tests__/default-queue.test.ts',
     '**/__tests__/index.test.ts',
+    '**/__tests__/media-session.test.ts',
+    '**/__tests__/sprite.test.ts',
+    '**/__tests__/webvtt.test.ts',
     '**/__tests__/integration/*.test.ts'
   ]
 };

@@ -90,6 +90,8 @@ const POSITION_EVENTS: readonly string[] = [
 ];
 /** How close to `endAt` counts as reaching it (timers and media clocks are not exact). */
 const END_TOLERANCE_MS = 10;
+/** How far from `startAt` playback may begin before the seek is considered failed. */
+const START_TOLERANCE_MS = 250;
 
 /**
  * Validates and sorts cues.
@@ -445,6 +447,7 @@ export class QueueEngine {
     this.clearLoadTimer(item);
     if (!this.hasBlockedItems()) this.disarmUnlock();
     if (item.started) return;
+    this.checkStartAt(item);
     item.started = true;
     item.resolveStarted(true);
     this.emitter.emit('start', channel.channelNumber, {
@@ -910,6 +913,25 @@ export class QueueEngine {
       element.currentTime = item.startAt / 1000;
     } catch {
       // Not seekable yet; retried on loadedmetadata.
+    }
+  }
+
+  /**
+   * Seeks can fail silently: a server without HTTP Range support makes the file unseekable until
+   * it has downloaded. If playback starts away from `startAt`, seek again once and say why.
+   */
+  protected checkStartAt(item: Item): void {
+    const element = item.element;
+    if (!element || item.startAt <= 0) return;
+    if (Math.abs(element.currentTime * 1000 - item.startAt) <= START_TOLERANCE_MS) return;
+    this.config.logger?.warn(
+      `audioq: ${item.fileName} did not start at ${String(item.startAt)} ms (startAt). ` +
+        'The server may not support HTTP Range requests, which seeking needs.'
+    );
+    try {
+      element.currentTime = item.startAt / 1000;
+    } catch {
+      // Still not seekable; playback continues from where it is.
     }
   }
 

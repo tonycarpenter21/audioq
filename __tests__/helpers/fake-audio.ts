@@ -27,6 +27,8 @@ export class FakeAudio extends EventTarget {
   static defaultPlayBehavior: PlayBehavior = 'resolve';
   /** When true, currentTime advances with (fake) time while playing, like a real media clock. */
   static mediaClock: boolean = false;
+  /** The next this-many seeks are ignored, like a file served without HTTP Range support. */
+  static ignoredSeeks: number = 0;
 
   crossOrigin: string | null = null;
   duration: number = NaN;
@@ -58,6 +60,7 @@ export class FakeAudio extends EventTarget {
     FakeAudio.instances = [];
     FakeAudio.defaultPlayBehavior = 'resolve';
     FakeAudio.mediaClock = false;
+    FakeAudio.ignoredSeeks = 0;
   }
 
   get currentTime(): number {
@@ -68,6 +71,10 @@ export class FakeAudio extends EventTarget {
   }
 
   set currentTime(value: number) {
+    if (FakeAudio.ignoredSeeks > 0) {
+      FakeAudio.ignoredSeeks--;
+      return;
+    }
     this.baseTime = value;
     if (this.clockStartedAt !== undefined) this.clockStartedAt = performance.now();
     if (FakeAudio.mediaClock) this.fire('seeked');

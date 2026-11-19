@@ -72,14 +72,47 @@ const builtInNames = () => {
   return names;
 };
 
-/** Every name that appears in the public type declarations (dist/types/index.d.ts and imports). */
+/** True for class members marked private or protected: implementation details, not API. */
+const isHiddenMember = (node) =>
+  ts.isClassElement(node) &&
+  (ts.getCombinedModifierFlags(node) & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) !==
+    0;
+
+/** The declaration files index.d.ts re-exports from, followed transitively. */
+const publicFiles = (typesDir) => {
+  const files = new Set(['index.d.ts']);
+  for (const file of files) {
+    const text = readFileSync(join(typesDir, file), 'utf8');
+    for (const [, target] of text.matchAll(
+      /^export\b[^;]*?\bfrom\s+['"]\.\/([\w.-]+?)(?:\.js)?['"]/gm
+    )) {
+      files.add(`${target}.d.ts`);
+    }
+  }
+  return [...files];
+};
+
+/**
+ * Every name in the public type declarations: each file index.d.ts re-exports from, minus
+ * private and protected class members.
+ */
 const publicNames = () => {
   const names = new Set();
   const typesDir = join(root, 'dist', 'types');
-  const publicFiles = ['index.d.ts', 'types.d.ts', 'audio-queue.d.ts', 'default-queue.d.ts'];
-  for (const file of publicFiles) {
-    const text = readFileSync(join(typesDir, file), 'utf8');
-    for (const [name] of text.matchAll(/[A-Za-z_$][\w$]*/g)) names.add(name);
+  for (const file of publicFiles(typesDir)) {
+    const path = join(typesDir, file);
+    const source = ts.createSourceFile(
+      path,
+      readFileSync(path, 'utf8'),
+      ts.ScriptTarget.Latest,
+      true
+    );
+    const visit = (node) => {
+      if (isHiddenMember(node)) return;
+      if (ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) names.add(node.text);
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
   }
   return names;
 };

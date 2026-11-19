@@ -61,6 +61,26 @@ describe('segments (endAt)', () => {
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  test('a startAt seek the browser ignored is retried once, with a warning', async () => {
+    const warn = jest.fn();
+    const queue = setup({ logger: { error: jest.fn(), warn } });
+    FakeAudio.ignoredSeeks = 2; // the seek before play() and the one on loadedmetadata
+    await queue.queueAudio('/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
+    await flush();
+    expect(audioAt(0).currentTime).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/sprite\.mp3 did not start at 1000 ms.*Range/);
+  });
+
+  test('a startAt seek that worked logs nothing', async () => {
+    const warn = jest.fn();
+    const queue = setup({ logger: { error: jest.fn(), warn } });
+    await queue.queueAudio('/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
+    await flush();
+    expect(audioAt(0).currentTime).toBe(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   test('pausing freezes the segment; resuming finishes it', async () => {
     const queue = setup();
     const complete = jest.fn();

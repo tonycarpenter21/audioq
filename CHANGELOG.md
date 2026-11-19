@@ -39,7 +39,9 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   (`historySize` config).
 - **`connectMediaSession`**: lock-screen and media-notification controls (tree-shakable).
 - **Audio sprites and segments**: `endAt` option (with `startAt`; segments can loop) and
-  `defineSprite(src, { name: [startMs, endMs] })` (tree-shakable).
+  `defineSprite(src, { name: [startMs, endMs] })` (tree-shakable). If a `startAt` seek is
+  ignored (a server without HTTP Range support), it is retried when playback starts and a warning
+  says why.
 - **Cues**: `cues` option and `onAudioCue`/`offAudioCue` for captions, lyrics and lip-sync; ranged
   cues report enter and exit, point cues fire once; timed precisely and follow seeks.
   `parseWebVtt` turns a .vtt caption file into cues (tree-shakable).
