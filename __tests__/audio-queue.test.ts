@@ -8,6 +8,7 @@ import {
   IPHONE_UA,
   advance,
   audioAt,
+  callArg,
   flush,
   installFakeAudio,
   installFakeAudioContext,
@@ -407,7 +408,7 @@ describe('errors', () => {
     audioAt(0).fail(4);
     await flush();
     expect(errors).toHaveBeenCalledTimes(1);
-    expect(errors.mock.calls[0]?.[0]).toMatchObject({
+    expect(callArg(errors)).toMatchObject({
       errorType: AudioErrorType.Unsupported,
       fileName: 'missing.mp3',
       remainingInQueue: 1
@@ -432,7 +433,7 @@ describe('errors', () => {
     expect(audioAt(1).playCalls).toBe(0);
     expect(audioAt(0).paused).toBe(false);
     expect(names(queue.getQueueSnapshot())).toEqual(['one.mp3', 'three.mp3']);
-    expect(errors.mock.calls[0]?.[0]).toMatchObject({
+    expect(callArg(errors)).toMatchObject({
       errorType: AudioErrorType.Network,
       remainingInQueue: 1
     });
@@ -446,7 +447,7 @@ describe('errors', () => {
     await queue.queueAudio('/a.mp3');
     audioAt(0).fail(3, '');
     await flush();
-    expect(errors.mock.calls[0]?.[0].error.message).toBe('Media error (decode)');
+    expect(callArg(errors)).toMatchObject({ error: { message: 'Media error (decode)' } });
   });
 
   test('error events after an item was released are ignored', async () => {
@@ -472,7 +473,7 @@ describe('errors', () => {
     await queue.queueAudio('/a.mp3');
     await queue.queueAudio('/b.mp3');
     await flush();
-    expect(errors.mock.calls[0]?.[0].errorType).toBe(type);
+    expect(callArg(errors)).toMatchObject({ errorType: type });
     expect(names(queue.getQueueSnapshot())).not.toContain('a.mp3');
   });
 
@@ -510,7 +511,7 @@ describe('autoplay blocking', () => {
     await advance(60000, 1000);
     expect(queue.getQueueLength()).toBe(3);
     expect(errors).toHaveBeenCalledTimes(1);
-    expect(errors.mock.calls[0]?.[0].errorType).toBe(AudioErrorType.AutoplayBlocked);
+    expect(callArg(errors)).toMatchObject({ errorType: AudioErrorType.AutoplayBlocked });
 
     FakeAudio.defaultPlayBehavior = 'resolve';
     document.dispatchEvent(new Event('touchend'));
@@ -568,7 +569,7 @@ describe('load timeout', () => {
     await advance(4999, 1000);
     expect(errors).not.toHaveBeenCalled();
     await advance(10, 10);
-    expect(errors.mock.calls[0]?.[0].errorType).toBe(AudioErrorType.Timeout);
+    expect(callArg(errors)).toMatchObject({ errorType: AudioErrorType.Timeout });
     await expect(a.finished).resolves.toBe('error');
   });
 
@@ -610,7 +611,7 @@ describe('stopping and destroying', () => {
     await flush();
     const audio = audioAt(0);
     await queue.stopCurrentAudioInChannel();
-    expect(complete.mock.calls[0]?.[0]).toMatchObject({ reason: 'stopped', remainingInQueue: 1 });
+    expect(callArg(complete)).toMatchObject({ reason: 'stopped', remainingInQueue: 1 });
     await expect(a.finished).resolves.toBe('stopped');
     expect(audio.src).toBe('');
     expect(audio.loadCalls).toBe(1);
@@ -633,7 +634,7 @@ describe('stopping and destroying', () => {
     await queue.stopAllAudioInChannel();
     expect(queue.getQueueLength()).toBe(0);
     expect(complete).toHaveBeenCalledTimes(1);
-    expect(complete.mock.calls[0]?.[0]).toMatchObject({ reason: 'stopped', remainingInQueue: 0 });
+    expect(callArg(complete)).toMatchObject({ reason: 'stopped', remainingInQueue: 0 });
     expect(changes).toHaveBeenCalledTimes(1);
     await expect(Promise.all(handles.map((h) => h.finished))).resolves.toEqual([
       'stopped',
@@ -1165,9 +1166,7 @@ describe('Web Audio routing', () => {
       queue.setChannelPan(0, -1);
       await queue.queueAudio('https://cdn.other.com/a.mp3');
       expect(FakeAudioContext.instances[0]?.sources ?? []).toHaveLength(0);
-      expect(String(warn.mock.calls[0]?.[0])).toMatch(
-        /cannot pan a\.mp3: cross-origin without CORS/
-      );
+      expect(String(callArg(warn))).toMatch(/cannot pan a\.mp3: cross-origin without CORS/);
       await queue.queueAudio('https://cdn.other.com/b.mp3', 1, { crossOrigin: 'anonymous' });
       queue.setChannelPan(1, 1);
       expect(context().panners[0]?.pan.value).toBe(1);

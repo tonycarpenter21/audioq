@@ -7,7 +7,7 @@ import type { AudioQueue } from '../src/audio-queue';
 import { getDefaultAudioQueue } from '../src/default-queue';
 import { createChannelStore } from '../src/store';
 import type { ChannelState } from '../src/store';
-import { audioAt, flush, installFakeAudio } from './helpers/fake-audio';
+import { audioAt, callArg, flush, installFakeAudio } from './helpers/fake-audio';
 
 let queue: AudioQueue;
 const last = <T>(values: readonly T[]): T | undefined => values[values.length - 1];
@@ -112,7 +112,7 @@ describe('subscribe', () => {
     offFirst();
     offFirst(); // unsubscribing twice is harmless
     await queue.queueAudio('/a.mp3');
-    expect(second.mock.calls[second.mock.calls.length - 1]?.[0]).toMatchObject({
+    expect(callArg(second, -1)).toMatchObject({
       items: [{ fileName: 'a.mp3' }]
     });
     expect(first).toHaveBeenCalledTimes(1);
@@ -125,7 +125,7 @@ describe('subscribe', () => {
     const third = jest.fn();
     store.subscribe(third);
     expect(third).toHaveBeenCalledTimes(1);
-    expect((third.mock.calls[0]?.[0] as ChannelState).items).toHaveLength(2);
+    expect((callArg(third) as ChannelState).items).toHaveLength(2);
   });
 
   test('only reacts to its own channel', async () => {

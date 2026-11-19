@@ -33,6 +33,7 @@ const ORDER = [
   'changelog',
   'docs-links',
   'tsconfig-strictness',
+  'lint-strictness',
   'generated-code',
   // source structure
   'file-naming',

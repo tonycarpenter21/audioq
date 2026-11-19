@@ -52,7 +52,7 @@ export const startTween = (options: TweenOptions): Tween => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let settled = false;
   let settle: (completed: boolean) => void = () => undefined;
-  const done = new Promise<boolean>((resolve) => {
+  const done: Promise<boolean> = new Promise((resolve) => {
     settle = (completed: boolean): void => {
       if (settled) return;
       settled = true;

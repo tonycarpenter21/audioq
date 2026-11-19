@@ -58,7 +58,7 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   Center pauses or plays audio, the channel state follows and pause/resume events fire.
 - **`pauseWhenHidden`** config, `isLoading` and `playbackRate` in `AudioInfo`, `id` and
   `metadata` in every payload, `playedMs` in completion payloads.
-- `npm run validate:all`: 36 validation gates with reports in `.validation-reports/`, run by CI
+- `npm run validate:all`: 37 validation gates with reports in `.validation-reports/`, run by CI
   on every push and pull request (Node 20, 22 and 24).
 
 ### Fixed

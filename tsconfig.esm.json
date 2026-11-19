@@ -5,7 +5,8 @@
     "outDir": "./dist/esm",
     "declaration": false,
     "removeComments": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "isolatedDeclarations": false
   },
   "include": ["src/**/*"]
 }

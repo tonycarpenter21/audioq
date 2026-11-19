@@ -62,8 +62,31 @@ export const validationConfig = {
     'isolatedModules',
     'exactOptionalPropertyTypes',
     'noPropertyAccessFromIndexSignature',
-    'verbatimModuleSyntax'
+    'verbatimModuleSyntax',
+    'isolatedDeclarations',
+    'noUncheckedSideEffectImports'
   ],
+
+  /**
+   * Rules from typescript-eslint's strictTypeChecked and stylisticTypeChecked presets that may be
+   * switched off, and why. Any other preset rule that is off (or a warning) fails lint-strictness.
+   */
+  allowedOffLintRules: {
+    '@typescript-eslint/consistent-generic-constructors':
+      'configured, not off: isolatedDeclarations needs the type on the declaration',
+    '@typescript-eslint/no-confusing-void-expression':
+      'readability: `() => doThing()` shorthands are clearer than braces',
+    '@typescript-eslint/no-inferrable-types': 'house style: explicit types on declarations',
+    '@typescript-eslint/non-nullable-type-assertion-style':
+      'conflicts with no-non-null-assertion (it rewrites casts into `!`)',
+    '@typescript-eslint/require-await': 'public methods are async for a stable API'
+  },
+
+  /** Like allowedOffLintRules, but only in tests. */
+  allowedOffLintRulesInTests: {
+    '@typescript-eslint/unbound-method':
+      'expect(object.method).toHaveBeenCalled() is the Jest idiom; it never calls the method'
+  },
 
   /** Compiler options that must stay off (so unreachable code and stray labels are errors). */
   forbiddenCompilerOptions: ['allowUnreachableCode', 'allowUnusedLabels'],

@@ -8,7 +8,8 @@
     "declaration": false,
     "removeComments": true,
     "sourceMap": false,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "isolatedDeclarations": false
   },
   "include": ["src/**/*"]
 }

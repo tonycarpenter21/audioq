@@ -52,7 +52,7 @@ describe('getFadeConfig', () => {
     const copy = getFadeConfig(FadeType.Linear);
     copy.duration = 1;
     expect(getFadeConfig(FadeType.Linear).duration).toBe(800);
-    expect(getFadeConfig('nope' as FadeType)).toEqual(getFadeConfig(FadeType.Gentle));
+    expect(getFadeConfig('nope' as unknown as FadeType)).toEqual(getFadeConfig(FadeType.Gentle));
   });
 });
 

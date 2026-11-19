@@ -20,7 +20,10 @@
     "noPropertyAccessFromIndexSignature": true,
     "verbatimModuleSyntax": true,
     "allowUnreachableCode": false,
-    "allowUnusedLabels": false
+    "allowUnusedLabels": false,
+    "isolatedDeclarations": true,
+    "declaration": true,
+    "noUncheckedSideEffectImports": true
   },
   "include": ["src/**/*"]
 }

@@ -34,12 +34,30 @@ const commonRules = {
   // A catch block must handle the error or explain (in a comment) why it is ignored
   'no-empty': ['error', { allowEmptyCatch: false }],
   'no-fallthrough': 'error',
-  'no-unreachable': 'error'
+  'no-unreachable': 'error',
+  // Truthiness checks only on booleans and objects: `if (count)` and `if (name)` hide the 0 and
+  // '' cases, a classic source of one-off bugs.
+  '@typescript-eslint/strict-boolean-expressions': [
+    'error',
+    { allowNullableObject: true, allowNumber: false, allowString: false }
+  ],
+  // Turned off on purpose (readability): explicit types are house style, `() => doThing()`
+  // shorthands are clearer than braces, and public methods are async for a stable API.
+  '@typescript-eslint/no-inferrable-types': 'off',
+  '@typescript-eslint/no-confusing-void-expression': 'off',
+  '@typescript-eslint/require-await': 'off',
+  // Conflicts with no-non-null-assertion (it rewrites `as T` casts into the `!` that rule bans).
+  '@typescript-eslint/non-nullable-type-assertion-style': 'off',
+  // isolatedDeclarations needs the type on the declaration, not on the constructor.
+  '@typescript-eslint/consistent-generic-constructors': ['error', 'type-annotation']
 };
 
 export default [
   js.configs.recommended,
-  ...tseslint.configs.recommended,
+  // The strictest typescript-eslint presets, applied to TypeScript files only (below).
+  ...[...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked].map(
+    (config) => ({ ...config, files: ['src/**/*.ts', '__tests__/**/*.ts'] })
+  ),
   {
     files: ['src/**/*.ts'],
     languageOptions: {
@@ -67,7 +85,9 @@ export default [
     rules: {
       ...commonRules,
       'sort-keys': 'off',
-      '@typescript-eslint/explicit-function-return-type': 'off'
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      // expect(object.method).toHaveBeenCalled() is the Jest idiom; it never calls the method.
+      '@typescript-eslint/unbound-method': 'off'
     }
   },
   {

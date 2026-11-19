@@ -92,7 +92,7 @@ const fingerprint = ({ current, isPaused, items }: ChannelState): string =>
 export const createChannelStore = (channelNumber: number = 0, queue?: AudioQueue): ChannelStore => {
   const source = (): AudioQueue => queue ?? getDefaultAudioQueue();
   assertChannelNumber(channelNumber, source().getQueueConfig().maxChannels);
-  const listeners = new Set<ChannelStateListener>();
+  const listeners: Set<ChannelStateListener> = new Set();
   let state = read(source(), channelNumber);
   let key = fingerprint(state);
   let detach: Unsubscribe[] = [];

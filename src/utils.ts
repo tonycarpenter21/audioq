@@ -84,7 +84,7 @@ export const settleWithin = (promise: Promise<unknown>, ms: number): Promise<voi
   );
   if (!(ms > 0)) return settled;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const limit = new Promise<void>((resolve) => {
+  const limit: Promise<void> = new Promise((resolve) => {
     timer = setTimeout(resolve, Math.min(ms, MAX_TIMER_MS));
   });
   return Promise.race([settled, limit]).then(() => clearTimeout(timer));

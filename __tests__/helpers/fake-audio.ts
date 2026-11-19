@@ -374,7 +374,7 @@ export interface FakeFetch {
 
 /** Installs a fake global `fetch`. Requests are aborted through their AbortSignal like real ones. */
 export const installFakeFetch = (): FakeFetch => {
-  const pending = new Map<string, PendingFetch[]>();
+  const pending: Map<string, PendingFetch[]> = new Map();
   const next = (url: string): PendingFetch | undefined => pending.get(url)?.shift();
   const calls: string[] = [];
   const fetch = (url: string, init?: { signal?: AbortSignal }): Promise<FakeResponse> =>
@@ -405,4 +405,15 @@ export const removeFetch = (): void => {
     value: undefined,
     writable: true
   });
+};
+
+/**
+ * An argument a jest mock was called with, typed `unknown` (mock.calls is `any`).
+ * @param mock - The mock
+ * @param call - Which call (0 is the first; negative counts from the end)
+ * @param argument - Which argument
+ */
+export const callArg = (mock: jest.Mock, call: number = 0, argument: number = 0): unknown => {
+  const calls = mock.mock.calls as unknown[][];
+  return calls[call < 0 ? calls.length + call : call]?.[argument];
 };

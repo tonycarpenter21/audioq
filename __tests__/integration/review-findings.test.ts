@@ -13,6 +13,7 @@ import {
   IPHONE_UA,
   advance,
   audioAt,
+  callArg,
   flush,
   installFakeAudio,
   installFakeAudioContext,
@@ -261,6 +262,6 @@ describe('F11: resource use is bounded', () => {
     queue.onAudioError(0, errors);
     await queue.queueAudio('/a.mp3');
     await flush();
-    expect(errors.mock.calls[0]?.[0].errorType).toBe(AudioErrorType.AutoplayBlocked);
+    expect(callArg(errors)).toMatchObject({ errorType: AudioErrorType.AutoplayBlocked });
   });
 });

@@ -246,14 +246,14 @@ export class QueueEngine {
     source: AudioSource,
     options: AudioQueueOptions
   ): { fileName: string; objectUrl: string | undefined; src: string } {
-    if (typeof Blob !== 'undefined' && source instanceof Blob) {
+    if (typeof source !== 'string') {
       const objectUrl = URL.createObjectURL(source);
       const name = (source as Blob & { name?: unknown }).name;
       const fileName =
         typeof name === 'string' && name.length > 0 ? name : (options.metadata?.title ?? 'audio');
       return { fileName, objectUrl, src: objectUrl };
     }
-    const src = resolveUrl(String(source));
+    const src = resolveUrl(source);
     const memory = peekMemory(this)?.files.get(src);
     const objectUrl = memory === undefined ? undefined : URL.createObjectURL(memory);
     return { fileName: extractFileName(src), objectUrl, src };
@@ -280,8 +280,8 @@ export class QueueEngine {
   ): { handle: QueuedAudio; item: Item } {
     let resolveStarted: (started: boolean) => void = () => undefined;
     let resolveFinished: (outcome: ItemOutcome) => void = () => undefined;
-    const started = new Promise<boolean>((resolve) => (resolveStarted = resolve));
-    const finished = new Promise<ItemOutcome>((resolve) => (resolveFinished = resolve));
+    const started: Promise<boolean> = new Promise((resolve) => (resolveStarted = resolve));
+    const finished: Promise<ItemOutcome> = new Promise((resolve) => (resolveFinished = resolve));
     const item: Item = {
       ...settings,
       activeCues: new Set(),
@@ -518,7 +518,8 @@ export class QueueEngine {
   protected onElementError(channel: Channel, item: Item): void {
     const mediaError = item.element?.error;
     const type = categorizeMediaError(mediaError);
-    const error = new Error(mediaError?.message || `Media error (${type})`);
+    const message = mediaError?.message ?? '';
+    const error = new Error(message === '' ? `Media error (${type})` : message);
     if (channel.head === item) {
       this.fail(channel, item, type, error);
       return;

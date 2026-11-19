@@ -63,7 +63,7 @@ describe('Emitter', () => {
 
   test('off matches a custom key when the callback was wrapped', () => {
     const { emitter } = make();
-    const original = jest.fn();
+    const original = jest.fn<undefined, [number]>();
     emitter.on('ping', 0, (n) => original(n), original);
     emitter.off('ping', 0, original);
     emitter.emit('ping', 0, 1);

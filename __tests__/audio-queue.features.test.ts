@@ -11,6 +11,7 @@ import {
   FakeAudio,
   advance,
   audioAt,
+  callArg,
   flush,
   installFakeAudio,
   installObjectUrls,
@@ -107,7 +108,7 @@ describe('metadata', () => {
     queue.onAudioError(0, errors);
     await queue.queueAudio('/broken.mp3', 0, { metadata: { title: 'Broken' } });
     audioAt(0).fail(4);
-    expect(errors.mock.calls[0]?.[0].metadata).toEqual({ title: 'Broken' });
+    expect(callArg(errors)).toMatchObject({ metadata: { title: 'Broken' } });
   });
 });
 
@@ -120,7 +121,7 @@ describe('interrupt', () => {
     const waiting = queue.getQueueSnapshot()?.items[1];
     const urgent = await queue.queueAudio('/urgent.mp3', 0, { interrupt: true });
     expect(names(queue)).toEqual(['urgent.mp3']);
-    expect(complete.mock.calls[0]?.[0]).toMatchObject({ fileName: 'a.mp3', reason: 'stopped' });
+    expect(callArg(complete)).toMatchObject({ fileName: 'a.mp3', reason: 'stopped' });
     expect(waiting?.fileName).toBe('b.mp3');
     await expect(urgent.started).resolves.toBe(true);
   });
@@ -285,7 +286,7 @@ describe('repeat modes', () => {
     expect(names(queue)).toEqual(['loop.mp3', 'next.mp3']);
     expect(audioAt(0).playCalls).toBe(2);
     expect(audioAt(0).currentTime).toBe(0);
-    expect(completes.mock.calls[0]?.[0]).toMatchObject({ reason: 'ended', remainingInQueue: 1 });
+    expect(callArg(completes)).toMatchObject({ reason: 'ended', remainingInQueue: 1 });
     expect(starts).toHaveBeenCalledTimes(2);
     expect(queue.getHistory()).toHaveLength(1);
   });

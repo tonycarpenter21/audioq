@@ -103,7 +103,7 @@ describe('startTween', () => {
     const values: number[] = [];
     const tween = startTween({
       duration: 100,
-      easing: 'bogus' as EasingType,
+      easing: 'bogus' as unknown as EasingType,
       from: 0,
       onUpdate: (v) => values.push(v),
       to: 1

@@ -126,7 +126,8 @@ export const validateVolumeConfig = (config: VolumeConfig, maxChannels: number):
       `Invalid priority channel ${String(priorityChannel)}: expected 0 to ${maxChannels - 1}`
     );
   }
-  const clamp = (value: number): number => Math.min(1, Math.max(0, Number(value) || 0));
+  const clamp = (value: number): number =>
+    Math.min(1, Math.max(0, Number.isNaN(value) ? 0 : value));
   return {
     ...config,
     duckingVolume: clamp(config.duckingVolume),

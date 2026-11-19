@@ -203,5 +203,44 @@ export const toolingGates = [
         : fail('Strictness flags were turned off', problems);
     },
     title: 'Compiler strictness'
+  },
+  {
+    category: 'tooling',
+    description:
+      'ESLint applies every rule of the strictest typescript-eslint presets to src and tests, ' +
+      'except the few switched off on purpose (listed with reasons in config.mjs).',
+    id: 'lint-strictness',
+    run: async () => {
+      const { ESLint } = await import('eslint');
+      const tseslint = (await import('typescript-eslint')).default;
+      const presetRules = new Set(
+        [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked].flatMap(
+          (config) =>
+            Object.entries(config.rules ?? {})
+              .filter(([, setting]) => (Array.isArray(setting) ? setting[0] : setting) !== 'off')
+              .map(([rule]) => rule)
+        )
+      );
+      const eslint = new ESLint({ cwd: abs('.') });
+      const problems = [];
+      for (const file of ['src/engine.ts', '__tests__/audio-queue.test.ts']) {
+        const config = await eslint.calculateConfigForFile(abs(file));
+        for (const rule of presetRules) {
+          const setting = config.rules?.[rule];
+          const level = Array.isArray(setting) ? setting[0] : setting;
+          const isError = level === 2 || level === 'error';
+          const allowed =
+            rule in validationConfig.allowedOffLintRules ||
+            (file.startsWith('__tests__/') && rule in validationConfig.allowedOffLintRulesInTests);
+          if (!isError && !allowed) {
+            problems.push(`${file}: ${rule} is ${JSON.stringify(level ?? 'missing')}, not "error"`);
+          }
+        }
+      }
+      return problems.length === 0
+        ? pass(`${presetRules.size} strict preset rules enforced in src and tests`)
+        : fail(`${problems.length} strict rule(s) weakened`, problems);
+    },
+    title: 'Lint strictness'
   }
 ];

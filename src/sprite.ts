@@ -59,7 +59,7 @@ export const defineSprite = <Name extends string>(
     play: (name, channelNumber = 0, options = {}) => {
       const segment = map[name] as SpriteSegment | undefined;
       if (segment === undefined) {
-        return Promise.reject(new RangeError(`Unknown sprite "${String(name)}"`));
+        return Promise.reject(new RangeError(`Unknown sprite "${name}"`));
       }
       const { endMs, loop, startMs } = segmentOf(segment);
       return (queue ?? getDefaultAudioQueue()).queueAudio(source, channelNumber, {

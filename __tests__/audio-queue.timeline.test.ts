@@ -10,6 +10,7 @@ import {
   FakeAudio,
   advance,
   audioAt,
+  callArg,
   flush,
   installFakeAudio,
   removeAudioContext,
@@ -44,7 +45,7 @@ describe('segments (endAt)', () => {
     await advance(280, 10);
     expect(complete).not.toHaveBeenCalled();
     await advance(30, 10);
-    expect(complete.mock.calls[0]?.[0]).toMatchObject({ fileName: 'sprite.mp3', reason: 'ended' });
+    expect(callArg(complete)).toMatchObject({ fileName: 'sprite.mp3', reason: 'ended' });
     await expect(item.finished).resolves.toBe('ended');
     expect(audioAt(1).playCalls).toBe(1);
   });
@@ -69,7 +70,7 @@ describe('segments (endAt)', () => {
     await flush();
     expect(audioAt(0).currentTime).toBe(1);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0]?.[0])).toMatch(
+    expect(String(callArg(warn))).toMatch(
       /sprite\.mp3 did not start at 1000 ms: no HTTP Range support/
     );
   });
@@ -288,7 +289,7 @@ describe('crossfade', () => {
     expect(b.playCalls).toBe(0);
     await advance(20, 10);
     expect(b.playCalls).toBe(1);
-    expect(complete.mock.calls[0]?.[0]).toMatchObject({ fileName: 'a.mp3', reason: 'ended' });
+    expect(callArg(complete)).toMatchObject({ fileName: 'a.mp3', reason: 'ended' });
     expect(names(queue)).toEqual(['b.mp3']);
     await advance(500, 16);
     expect(a.volume).toBeGreaterThan(0.3);

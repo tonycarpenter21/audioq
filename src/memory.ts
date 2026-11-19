@@ -11,7 +11,7 @@ export interface Memory {
   files: Map<string, Blob>;
 }
 
-const memories = new WeakMap<object, Memory>();
+const memories: WeakMap<object, Memory> = new WeakMap();
 
 /**
  * A queue's storage, created on first use.

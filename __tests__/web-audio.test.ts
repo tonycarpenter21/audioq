@@ -136,11 +136,9 @@ describe('WebAudioEngine', () => {
   });
 
   test('connect returns undefined when the context constructor throws', () => {
-    (globalThis as { AudioContext?: unknown }).AudioContext = class {
-      constructor() {
-        throw new Error('too many contexts');
-      }
-    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => {
+      throw new Error('too many contexts');
+    });
     expect(new WebAudioEngine().connect(element(), 1)).toBeUndefined();
   });
 

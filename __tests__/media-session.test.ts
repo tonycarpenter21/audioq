@@ -23,11 +23,13 @@ const installSession = (unsupported: string[] = []): FakeSession => {
     metadata: null,
     playbackState: 'none',
     positions: [],
-    setActionHandler: jest.fn((action: string, handler) => {
-      if (unsupported.includes(action)) throw new TypeError(`${action} is not supported`);
-      session.handlers.set(action, handler);
-    }),
-    setPositionState: jest.fn((state) => session.positions.push(state))
+    setActionHandler: jest.fn(
+      (action: string, handler: ((details: Record<string, unknown>) => void) | null) => {
+        if (unsupported.includes(action)) throw new TypeError(`${action} is not supported`);
+        session.handlers.set(action, handler);
+      }
+    ),
+    setPositionState: jest.fn((state: Record<string, number>) => session.positions.push(state))
   };
   Object.defineProperty(navigator, 'mediaSession', { configurable: true, value: session });
   (globalThis as { MediaMetadata?: unknown }).MediaMetadata = FakeMediaMetadata;

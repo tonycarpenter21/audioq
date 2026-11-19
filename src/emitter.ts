@@ -54,7 +54,7 @@ export class Emitter<Events extends object> {
    * @param key - Remove only the listener registered with this key (its callback by default);
    * omit to remove every listener on the channel
    */
-  off<K extends keyof Events>(event: K, channel: number, key?: unknown): void {
+  off(event: keyof Events, channel: number, key?: unknown): void {
     const set = this.listeners.get(event);
     if (!set) return;
     for (const registration of [...set]) {
@@ -88,7 +88,7 @@ export class Emitter<Events extends object> {
    * @param channel - Channel the event is for
    * @returns True when at least one listener would receive the event
    */
-  has<K extends keyof Events>(event: K, channel: number): boolean {
+  has(event: keyof Events, channel: number): boolean {
     const set = this.listeners.get(event);
     if (!set) return false;
     for (const registration of set) {
