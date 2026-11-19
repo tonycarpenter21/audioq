@@ -48,6 +48,10 @@ Demo conventions:
   declares `channel` (0, 1 or 'global') and `enabledWhen` ('always', 'hasAudio', 'idle',
   'playing', 'paused'); button text is free. The rules are in `src/ExampleTab/exampleOrganizer.ts`.
 - Async button handlers return their promise; fire-and-forget calls are written `void call()`.
+- A tab shows only the channels that have examples. Group related buttons into small tabs
+  rather than growing one tab: shared buttons are named controls composed per tab (see
+  `playlistControls` in `v3Examples.ts`).
+- Developer tools (the audioq event log) live in the on-page debug console, not on a tab.
 - Read channel state with the `useChannel` hook (createChannelStore), not polling.
 - Settings a tab changes must be reset in `performFullCleanup` (src/App.tsx) or the tab
   component's cleanup.
