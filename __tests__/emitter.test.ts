@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests for the typed event emitter.
+ *
+ * @dist-skip White-box test: reads Emitter internals, which the build renames.
+ */
 import { Emitter } from '../src/emitter';
 
 interface Events {

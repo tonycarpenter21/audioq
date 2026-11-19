@@ -4,7 +4,17 @@
 import { readFileSync } from 'node:fs';
 import { renderDefaultApi } from '../../generate-default-api.mjs';
 import { validationConfig } from '../config.mjs';
-import { abs, exists, fail, fromCommand, pass, read, readJson, runCommand } from '../lib.mjs';
+import {
+  abs,
+  exists,
+  fail,
+  fromCommand,
+  pass,
+  read,
+  readJson,
+  runCommand,
+  testFiles
+} from '../lib.mjs';
 
 export const toolingGates = [
   {
@@ -137,15 +147,19 @@ export const toolingGates = [
     category: 'package',
     dependsOn: ['build'],
     description:
-      'The public-API test suites pass against the BUILT package (dist/cjs), so the shipped code ' +
-      'is tested too, including build-time transforms like renamed internals.',
+      'Every test suite passes against the BUILT package (dist/cjs), so the shipped code is ' +
+      'tested too, including build-time transforms like renamed internals. Only suites tagged ' +
+      '`@dist-skip <reason>` (white-box tests of renamed internals) are left out.',
     id: 'dist-tests',
     run: async () => {
       const result = await runCommand('jest', ['--ci', '-c', 'jest.dist.config.js']);
       const totals = result.output.match(/Tests:\s+(.*)/);
+      const skipped = testFiles().filter((path) =>
+        /@dist-skip\s+\S/.test(read(path).slice(0, 2000))
+      );
       return fromCommand(
         result,
-        `Built package passes (${totals ? totals[1] : 'see log'})`,
+        `Built package passes (${totals ? totals[1] : 'see log'}; ${skipped.length} white-box suites skipped)`,
         `Built package fails tests (${totals ? totals[1] : 'see log'})`
       );
     },

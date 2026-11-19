@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests for Channel: gain, rate, gaps and history bookkeeping.
+ *
+ * @dist-skip White-box test: reads Channel fields, which the build renames.
+ */
 import { Channel } from '../src/channel';
 import type { Item } from '../src/channel';
 import type { Tween } from '../src/tween';

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests for timer-based tweens and easing curves.
+ *
+ * @dist-skip White-box test: reads Tween internals, which the build renames.
+ */
 import { EASINGS, TWEEN_STEP_MS, startTween } from '../src/tween';
 import { EasingType } from '../src/types';
 import { flush } from './helpers/fake-audio';

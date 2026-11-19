@@ -1,5 +1,7 @@
 /**
  * @fileoverview Tests for the per-queue storage of preloaded files.
+ *
+ * @dist-skip White-box test: reads the storage fields, which the build renames.
  */
 import { forgetMemory, memoryOf, peekMemory } from '../src/memory';
 

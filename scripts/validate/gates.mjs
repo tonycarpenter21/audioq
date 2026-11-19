@@ -3,6 +3,7 @@
  * build and the gates that inspect its output.
  */
 import { docGates } from './gates/docs.mjs';
+import { mangleGates } from './gates/mangle.mjs';
 import { packageGates } from './gates/package.mjs';
 import { repoGates } from './gates/repo.mjs';
 import { sourceGates } from './gates/source.mjs';
@@ -10,9 +11,15 @@ import { testGates } from './gates/tests.mjs';
 import { toolingGates } from './gates/tooling.mjs';
 
 const byId = new Map(
-  [...toolingGates, ...testGates, ...sourceGates, ...packageGates, ...docGates, ...repoGates].map(
-    (gate) => [gate.id, gate]
-  )
+  [
+    ...toolingGates,
+    ...testGates,
+    ...sourceGates,
+    ...packageGates,
+    ...mangleGates,
+    ...docGates,
+    ...repoGates
+  ].map((gate) => [gate.id, gate])
 );
 
 const ORDER = [
@@ -52,6 +59,7 @@ const ORDER = [
   'coverage-per-file',
   // build output
   'build',
+  'mangle-safety',
   'dist-tests',
   'package-exports',
   'ssr-import',
