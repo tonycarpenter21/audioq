@@ -98,7 +98,7 @@ describe('F4: one failure, one report; autoplay blocking keeps the queue', () =>
     await advance(400000, 10000);
     expect(queue.getQueueLength()).toBe(4);
     FakeAudio.defaultPlayBehavior = 'resolve';
-    document.dispatchEvent(new Event('pointerdown'));
+    document.dispatchEvent(new Event('touchend'));
     await flush();
     expect(queue.getCurrentAudioInfo()?.isPlaying).toBe(true);
   });

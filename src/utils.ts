@@ -67,3 +67,25 @@ export const now = (): number =>
  */
 export const secondsToMs = (seconds: number): number =>
   Number.isFinite(seconds) ? seconds * 1000 : 0;
+
+/** Longest delay timers support (about 24.8 days); larger values fire immediately. */
+export const MAX_TIMER_MS: number = 2 ** 31 - 1;
+
+/**
+ * Waits for a promise, but no longer than `ms` (0 or less waits without a limit).
+ * @param promise - Promise to wait for
+ * @param ms - Maximum wait in milliseconds
+ * @returns Resolves when the promise settles or the time is up; never rejects
+ */
+export const settleWithin = (promise: Promise<unknown>, ms: number): Promise<void> => {
+  const settled = promise.then(
+    () => undefined,
+    () => undefined
+  );
+  if (!(ms > 0)) return settled;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, Math.min(ms, MAX_TIMER_MS));
+  });
+  return Promise.race([settled, limit]).then(() => clearTimeout(timer));
+};

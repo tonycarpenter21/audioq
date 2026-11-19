@@ -133,8 +133,8 @@ export const destroyChannel = (channelNumber?: number): Promise<void> =>
   getDefaultAudioQueue().destroyChannel(channelNumber);
 
 /**
- * Destroys every channel, removes all listeners and closes the shared AudioContext.
- * The queue can still be used afterwards.
+ * Destroys every channel, removes all listeners, resets global volume and ducking, and closes
+ * the shared AudioContext. The queue can still be used afterwards.
  */
 export const destroyAllChannels = (): Promise<void> => getDefaultAudioQueue().destroyAllChannels();
 

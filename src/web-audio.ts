@@ -127,10 +127,14 @@ export class WebAudioEngine {
     }
   }
 
-  /** Resumes the context if the browser suspended it (autoplay policy). Never throws. */
+  /**
+   * Resumes the context if the browser suspended it (autoplay policy) or iOS interrupted it
+   * (phone call, Siri). Never throws.
+   */
   resume(): void {
-    if (this.context?.state === 'suspended') {
-      this.context.resume().catch(() => undefined);
+    const state = this.context?.state as string | undefined;
+    if (state === 'suspended' || state === 'interrupted') {
+      this.context?.resume().catch(() => undefined);
     }
   }
 

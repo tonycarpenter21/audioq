@@ -141,22 +141,18 @@ export class AudioQueue extends QueueEngine {
     options: AudioQueueOptions = {}
   ): Promise<QueuedAudio> {
     const url = checkSource(source);
+    if (options.maxQueueSize !== undefined && !(options.maxQueueSize >= 1)) {
+      throw new RangeError('maxQueueSize must be at least 1');
+    }
+    const isNew = !this.channels.has(channelNumber);
     const channel = this.channel(channelNumber);
-    const dedupeMs = options.dedupeMs ?? 0;
-    if (url !== undefined && dedupeMs > 0 && channel.isDuplicate(url, dedupeMs, Date.now())) {
-      return this.skippedHandle(channelNumber, url, options);
+    try {
+      return this.enqueue(channel, source, url, options);
+    } catch (error) {
+      // A rejected call must not leave an empty channel behind.
+      if (isNew && channel.items.length === 0) this.channels.delete(channelNumber);
+      throw error;
     }
-    if (options.interrupt === true) this.clearChannel(channel);
-    this.makeRoom(channel, options.maxQueueSize);
-    const { handle, item } = this.createItem(url ?? source, channelNumber, options);
-    if (options.addToFront === true && channel.items.length > 0) {
-      channel.items.splice(1, 0, item);
-    } else {
-      channel.items.push(item);
-    }
-    this.emitQueueChange(channel);
-    this.refresh(channel);
-    return handle;
   }
 
   /**
@@ -196,9 +192,8 @@ export class AudioQueue extends QueueEngine {
 
   /** Stops and clears every channel. */
   async stopAllAudio(): Promise<void> {
-    for (const channelNumber of [...this.channels.keys()]) {
-      await this.stopAllAudioInChannel(channelNumber);
-    }
+    // Synchronous on purpose: audio queued right after an un-awaited call must survive.
+    this.channels.forEach((channel) => this.clearChannel(channel));
   }
 
   /**
@@ -206,23 +201,20 @@ export class AudioQueue extends QueueEngine {
    * @param channelNumber - Channel (defaults to 0)
    */
   async destroyChannel(channelNumber: number = 0): Promise<void> {
-    await this.stopAllAudioInChannel(channelNumber);
-    this.channels.get(channelNumber)?.cancelTweens();
-    this.channels.delete(channelNumber);
-    this.emitter.clearChannel(channelNumber);
-    this.updateDucking();
+    this.destroyNow(channelNumber);
   }
 
   /**
-   * Destroys every channel, removes all listeners and closes the shared AudioContext.
-   * The queue can still be used afterwards.
+   * Destroys every channel, removes all listeners, resets global volume and ducking, and closes
+   * the shared AudioContext. The queue can still be used afterwards.
    */
   async destroyAllChannels(): Promise<void> {
-    for (const channelNumber of [...this.channels.keys()]) {
-      await this.destroyChannel(channelNumber);
-    }
+    // Synchronous on purpose (React effect cleanups do not await): anything queued or subscribed
+    // right after this call belongs to the fresh state.
+    [...this.channels.keys()].forEach((channelNumber) => this.destroyNow(channelNumber));
     this.emitter.clear();
     this.ducking = undefined;
+    this.globalVolume = 1;
     this.disarmUnlock();
     this.webAudio.close();
   }
@@ -349,7 +341,7 @@ export class AudioQueue extends QueueEngine {
    * @param channelNumber - Channel (defaults to 0)
    */
   async togglePauseChannel(channelNumber: number = 0): Promise<void> {
-    if (this.existing(channelNumber)?.paused === true) {
+    if (this.isPausedOrPausing(channelNumber)) {
       await this.resumeChannel(channelNumber);
     } else {
       await this.pauseChannel(channelNumber);
@@ -387,8 +379,9 @@ export class AudioQueue extends QueueEngine {
     if (!channel?.head || channel.paused) return;
     const preset = getFadeConfig(fadeType);
     channel.lastFade = { duration, fadeType };
+    channel.pendingPause = true;
     const completed = await this.fade(channel, 0, duration ?? preset.duration, preset.pauseCurve);
-    if (completed) await this.pauseChannel(channelNumber);
+    if (completed && channel.pendingPause) this.pauseNow(channel);
   }
 
   /**
@@ -405,9 +398,9 @@ export class AudioQueue extends QueueEngine {
     const channel = this.existing(channelNumber);
     const head = channel?.head;
     if (!channel || !head) return;
-    const fadingOut = channel.fadeTween !== undefined && channel.fadeFactor < 1;
-    if (!channel.paused && !fadingOut) return;
+    if (!channel.paused && !channel.pendingPause) return;
     const { curve, length } = this.resumeFadeSettings(channel, fadeType, duration);
+    channel.pendingPause = false;
     channel.fadeTween?.cancel();
     if (channel.paused) {
       channel.fadeFactor = 0;
@@ -430,7 +423,7 @@ export class AudioQueue extends QueueEngine {
     channelNumber: number = 0,
     duration?: number
   ): Promise<void> {
-    if (this.existing(channelNumber)?.paused === true) {
+    if (this.isPausedOrPausing(channelNumber)) {
       await this.resumeWithFade(undefined, channelNumber, duration);
     } else {
       await this.pauseWithFade(fadeType, channelNumber, duration);
@@ -607,8 +600,9 @@ export class AudioQueue extends QueueEngine {
 
   /** Turns ducking off and restores every channel. */
   clearVolumeDucking(): void {
+    const previous = this.ducking;
     this.ducking = undefined;
-    this.updateDucking();
+    this.updateDucking(previous);
   }
 
   // ---------------------------------------------------------------- information

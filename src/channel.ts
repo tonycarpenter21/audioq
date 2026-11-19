@@ -98,6 +98,8 @@ export class Channel {
   maxQueueSize: number | undefined;
   /** Whether the channel is paused. */
   paused: boolean = false;
+  /** A pauseWithFade is fading out; the channel pauses when it finishes. */
+  pendingPause: boolean = false;
   /** Channel playback speed (multiplied with each item's rate). */
   playbackRate: number = 1;
   /** Sources recently queued, with the time until which repeats are ignored (`dedupeMs`). */

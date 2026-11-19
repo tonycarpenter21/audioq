@@ -59,7 +59,8 @@ export const startTween = (options: TweenOptions): Tween => {
     };
   });
 
-  if (!(duration > 0) || from === to) {
+  // Zero, negative, NaN and infinite durations apply immediately, so a transition always ends.
+  if (!(duration > 0) || !Number.isFinite(duration) || from === to) {
     onUpdate(to);
     settle(true);
     return { cancel: (): void => undefined, done };

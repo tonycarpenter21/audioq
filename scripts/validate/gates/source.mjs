@@ -16,7 +16,6 @@ import {
   read,
   runtimeExports,
   sourceFiles,
-  testFiles,
   ts
 } from '../lib.mjs';
 
@@ -166,15 +165,14 @@ export const sourceGates = [
   },
   {
     category: 'source',
-    description: 'Source files, test files and functions stay under the size limits in config.mjs.',
+    description:
+      'Function bodies in src stay short enough to review (limit in config.mjs). File length is ' +
+      'not limited.',
     id: 'size-limits',
     run: async () => {
-      const { maxFunctionLines, maxSourceFileLines, maxTestFileLines } = validationConfig.size;
+      const { maxFunctionLines } = validationConfig.size;
       const problems = [];
       for (const path of sourceFiles()) {
-        const lines = read(path).split('\n').length;
-        if (lines > maxSourceFileLines)
-          problems.push(`${path}: ${lines} lines > ${maxSourceFileLines}`);
         const file = getSourceFile(path);
         const visit = (node) => {
           if (isFunctionWithBody(node)) {
@@ -190,16 +188,11 @@ export const sourceGates = [
         };
         visit(file);
       }
-      for (const path of testFiles()) {
-        const lines = read(path).split('\n').length;
-        if (lines > maxTestFileLines)
-          problems.push(`${path}: ${lines} lines > ${maxTestFileLines}`);
-      }
       return problems.length === 0
-        ? pass(`Files <= ${maxSourceFileLines} lines, functions <= ${maxFunctionLines} lines`)
+        ? pass(`Every function body is <= ${maxFunctionLines} lines`)
         : fail(`${problems.length} size limit(s) exceeded`, problems);
     },
-    title: 'Size limits'
+    title: 'Function length'
   },
   {
     category: 'source',

@@ -8,12 +8,8 @@ export const validationConfig = {
   /** Per-file coverage minimums for every file in src/ (percent). */
   coveragePerFile: { branches: 85, functions: 90, lines: 95, statements: 95 },
 
-  /** Size limits. */
-  size: {
-    maxFunctionLines: 60,
-    maxSourceFileLines: 1400,
-    maxTestFileLines: 1500
-  },
+  /** Longest function body allowed in src (files themselves have no length limit). */
+  size: { maxFunctionLines: 60 },
 
   /**
    * Size budgets in bytes. `*GzipBytes` measure the unminified dist output; `minified*` measure

@@ -3,6 +3,7 @@
  */
 
 import { EasingType, FadeType, MAX_CHANNELS } from './types.js';
+import { MAX_TIMER_MS } from './utils.js';
 import type { FadeConfig, Logger, QueueConfig, VolumeConfig } from './types.js';
 
 /** Logger that writes to the browser console. */
@@ -98,8 +99,10 @@ export const mergeQueueConfig = (base: QueueConfig, patch: Partial<QueueConfig>)
   if (!isNonNegativeInteger(next.prefetchCount)) {
     throw new RangeError('prefetchCount must be a non-negative integer');
   }
-  if (!(next.loadTimeoutMs >= 0)) {
-    throw new RangeError('loadTimeoutMs must be 0 (disabled) or a positive number');
+  if (!(next.loadTimeoutMs >= 0 && next.loadTimeoutMs <= MAX_TIMER_MS)) {
+    throw new RangeError(
+      `loadTimeoutMs must be 0 (disabled) or a number of milliseconds up to ${MAX_TIMER_MS}`
+    );
   }
   if (!['auto', 'force', 'off'].includes(next.webAudio)) {
     throw new RangeError('webAudio must be "off", "auto" or "force"');

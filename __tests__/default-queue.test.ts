@@ -29,11 +29,13 @@ describe('getDefaultAudioQueue', () => {
 });
 
 describe('top-level functions', () => {
-  test('there is one function per public AudioQueue method (private ones excluded)', () => {
-    const exported = Object.keys(api).filter((name) => name !== 'getDefaultAudioQueue');
-    const publicMethods = classMethods().filter((name) => exported.includes(name));
+  test('there is exactly one function per public AudioQueue method', () => {
+    const exported = Object.keys(api)
+      .filter((name) => name !== 'getDefaultAudioQueue')
+      .sort();
+    // AudioQueue.prototype holds only the public API; internals live on QueueEngine.prototype.
     expect(exported.length).toBeGreaterThan(50);
-    expect(publicMethods.sort()).toEqual(exported.sort());
+    expect(exported).toEqual(classMethods().sort());
   });
 
   test('each function forwards every declared argument and the return value', () => {

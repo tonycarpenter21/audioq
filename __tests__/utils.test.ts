@@ -1,4 +1,12 @@
-import { assertChannelNumber, clampUnit, extractFileName, now, secondsToMs } from '../src/utils';
+import {
+  MAX_TIMER_MS,
+  assertChannelNumber,
+  clampUnit,
+  extractFileName,
+  now,
+  secondsToMs,
+  settleWithin
+} from '../src/utils';
 
 describe('clampUnit', () => {
   test.each([
@@ -74,7 +82,11 @@ describe('now', () => {
     try {
       expect(Math.abs(now() - Date.now())).toBeLessThan(1000);
     } finally {
-      Object.defineProperty(globalThis, 'performance', { configurable: true, value: original });
+      Object.defineProperty(globalThis, 'performance', {
+        configurable: true,
+        value: original,
+        writable: true
+      });
     }
   });
 });
@@ -84,5 +96,36 @@ describe('secondsToMs', () => {
     expect(secondsToMs(1.5)).toBe(1500);
     expect(secondsToMs(NaN)).toBe(0);
     expect(secondsToMs(Infinity)).toBe(0);
+  });
+});
+
+describe('settleWithin', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  test('MAX_TIMER_MS is the largest delay timers accept', () => {
+    expect(MAX_TIMER_MS).toBe(2147483647);
+  });
+
+  test('resolves when the promise resolves or rejects, before the limit', async () => {
+    await expect(settleWithin(Promise.resolve(1), 1000)).resolves.toBeUndefined();
+    await expect(settleWithin(Promise.reject(new Error('x')), 1000)).resolves.toBeUndefined();
+  });
+
+  test('resolves after the limit when the promise never settles', async () => {
+    let done = false;
+    void settleWithin(new Promise(() => undefined), 500).then(() => (done = true));
+    jest.advanceTimersByTime(499);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    jest.advanceTimersByTime(1);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(done).toBe(true);
+  });
+
+  test('a limit of 0 waits for the promise without a timer', async () => {
+    const spy = jest.spyOn(globalThis, 'setTimeout');
+    await settleWithin(Promise.resolve(), 0);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -54,16 +54,19 @@ export const releaseElement = (element: HTMLAudioElement): void => {
 
 /**
  * Whether a URL is same-origin (or origin-less, like blob: and data:), meaning Web Audio can read
- * its samples without CORS.
+ * its samples without CORS. Scheme and host are compared directly, because the URL standard gives
+ * custom schemes such as `capacitor://localhost` an opaque ("null") origin.
  * @param src - Resolved URL of the element
- * @param pageOrigin - Origin of the current page
+ * @param pageUrl - URL of the current page
  * @returns True when routing through Web Audio will not produce silence
  */
-export const isSameOriginSource = (src: string, pageOrigin: string | undefined): boolean => {
+export const isSameOriginSource = (src: string, pageUrl: string | undefined): boolean => {
   if (src.startsWith('blob:') || src.startsWith('data:')) return true;
-  if (pageOrigin === undefined) return false;
+  if (pageUrl === undefined) return false;
   try {
-    return new URL(src, pageOrigin).origin === pageOrigin;
+    const page = new URL(pageUrl);
+    const source = new URL(src, page);
+    return source.protocol === page.protocol && source.host === page.host;
   } catch {
     return false;
   }

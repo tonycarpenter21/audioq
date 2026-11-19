@@ -513,7 +513,7 @@ describe('autoplay blocking', () => {
     expect(errors.mock.calls[0]?.[0].errorType).toBe(AudioErrorType.AutoplayBlocked);
 
     FakeAudio.defaultPlayBehavior = 'resolve';
-    document.dispatchEvent(new Event('pointerdown'));
+    document.dispatchEvent(new Event('touchend'));
     await flush();
     expect(queue.getCurrentAudioInfo()?.isPlaying).toBe(true);
     const plays = audioAt(0).playCalls;
@@ -553,7 +553,7 @@ describe('autoplay blocking', () => {
     await queue.queueAudio('/a.mp3');
     await flush();
     await queue.stopAllAudio();
-    expect(remove).toHaveBeenCalledWith('pointerdown', expect.any(Function), { capture: true });
+    expect(remove).toHaveBeenCalledWith('mousedown', expect.any(Function), { capture: true });
   });
 });
 

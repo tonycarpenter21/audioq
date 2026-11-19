@@ -178,4 +178,23 @@ describe('WebAudioEngine', () => {
     engine.connect(element(), 1);
     expect(FakeAudioContext.instances).toHaveLength(2);
   });
+
+  test('close does not close a context that is already closed (N08)', () => {
+    const engine = new WebAudioEngine();
+    engine.connect(element(), 1);
+    const context = FakeAudioContext.instances[0] as FakeAudioContext;
+    context.state = 'closed';
+    engine.close();
+    expect(context.close).not.toHaveBeenCalled();
+  });
+
+  test('resume also wakes an iOS "interrupted" context (BUG-11)', () => {
+    const engine = new WebAudioEngine();
+    engine.connect(element(), 1);
+    const context = FakeAudioContext.instances[0] as FakeAudioContext;
+    (context as unknown as { state: string }).state = 'interrupted';
+    context.resume.mockClear();
+    engine.resume();
+    expect(context.resume).toHaveBeenCalledTimes(1);
+  });
 });
