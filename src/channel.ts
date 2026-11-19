@@ -87,6 +87,8 @@ export interface RememberedFade {
 export class Channel {
   /** Ducking multiplier (1 when not ducked). */
   duckFactor: number = 1;
+  /** Muted with setChannelMuted: silent, with the volume kept for unmuting. */
+  muted: boolean = false;
   /** Target the current ducking transition is heading to. */
   duckTarget: number = 1;
   /** Running ducking transition. */
@@ -146,10 +148,11 @@ export class Channel {
   /**
    * Output gain for the current item.
    * @param globalVolume - Global volume multiplier
-   * @returns Product of all volume factors, clamped to 0-1
+   * @returns Product of all volume factors, clamped to 0-1 (0 while the channel is muted)
    */
   effectiveGain(globalVolume: number): number {
     const itemVolume = this.head?.volume ?? 1;
+    if (this.muted) return 0;
     const gain = this.volume * itemVolume * globalVolume * this.duckFactor * this.fadeFactor;
     return Math.min(1, Math.max(0, gain));
   }

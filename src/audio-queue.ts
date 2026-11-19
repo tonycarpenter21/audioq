@@ -207,7 +207,7 @@ export class AudioQueue extends QueueEngine {
   }
 
   /**
-   * Destroys every channel, removes all listeners, resets global volume and ducking, releases
+   * Destroys every channel, removes all listeners, resets global volume, muting and ducking, releases
    * preloaded files, and closes the shared AudioContext. The queue can still be used afterwards.
    */
   async destroyAllChannels(): Promise<void> {
@@ -217,6 +217,7 @@ export class AudioQueue extends QueueEngine {
     this.emitter.clear();
     this.ducking = undefined;
     this.globalVolume = 1;
+    this.globalMuted = false;
     this.disarmUnlock();
     this.webAudio.close();
     forgetMemory(this);
@@ -596,6 +597,48 @@ export class AudioQueue extends QueueEngine {
    */
   getGlobalVolume(): number {
     return this.globalVolume;
+  }
+
+  /**
+   * Mutes or unmutes everything. Volumes are kept, so unmuting restores them exactly, and audio
+   * keeps playing (muting is not pausing).
+   * @param muted - Whether to mute
+   * @example
+   * ```ts
+   * muteButton.onclick = () => setMuted(!isMuted());
+   * ```
+   */
+  setMuted(muted: boolean): void {
+    this.globalMuted = muted;
+    this.applyMute(this.channels.values());
+  }
+
+  /**
+   * Whether everything is muted with `setMuted`.
+   * @returns True when muted
+   */
+  isMuted(): boolean {
+    return this.globalMuted;
+  }
+
+  /**
+   * Mutes or unmutes one channel, keeping its volume.
+   * @param channelNumber - Channel
+   * @param muted - Whether to mute
+   */
+  setChannelMuted(channelNumber: number, muted: boolean): void {
+    const channel = this.channel(channelNumber);
+    channel.muted = muted;
+    this.applyMute([channel]);
+  }
+
+  /**
+   * Whether a channel is muted with `setChannelMuted` (global muting is reported by `isMuted`).
+   * @param channelNumber - Channel (defaults to 0)
+   * @returns True when the channel is muted
+   */
+  isChannelMuted(channelNumber: number = 0): boolean {
+    return this.existing(channelNumber)?.muted ?? false;
   }
 
   /**

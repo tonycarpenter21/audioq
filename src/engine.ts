@@ -148,6 +148,7 @@ export class QueueEngine {
   protected ducking: VolumeConfig | undefined;
   protected readonly emitter: Emitter<QueueEvents>;
   protected globalVolume: number = 1;
+  protected globalMuted: boolean = false;
   protected nextId: number = 1;
   protected unlockArmed: boolean = false;
   protected visibilityArmed: boolean = false;
@@ -434,7 +435,7 @@ export class QueueEngine {
     // that are same-origin or explicitly loaded with CORS.
     const elementSource = item.objectUrl ?? item.src;
     if (item.crossOrigin === undefined && !isSameOriginSource(elementSource, pageUrl)) return;
-    item.route = this.webAudio.connect(element, channel.effectiveGain(this.globalVolume));
+    item.route = this.webAudio.connect(element, channel.effectiveGain(this.masterGain()));
   }
 
   protected play(channel: Channel, item: Item): Promise<void> {
@@ -726,7 +727,7 @@ export class QueueEngine {
   /** Starts the next item fading in while this one fades out, then lets this one go. */
   protected beginCrossfade(channel: Channel, item: Item, element: HTMLAudioElement): void {
     const fadeMs = crossfadeLength(channel, item, item.endAt ?? secondsToMs(element.duration));
-    const startGain = channel.effectiveGain(this.globalVolume);
+    const startGain = channel.effectiveGain(this.masterGain());
     channel.items.shift();
     if (channel.repeat === 'all') channel.items.push(this.copyForRepeat(item));
     this.report(channel, item, 'ended', channel.items.length);
@@ -904,10 +905,23 @@ export class QueueEngine {
     });
   }
 
+  /** Global volume, or 0 while everything is muted. */
+  protected masterGain(): number {
+    return this.globalMuted ? 0 : this.globalVolume;
+  }
+
+  /** Applies a mute change: new gains everywhere, and a crossfade's fading tail goes silent. */
+  protected applyMute(channels: Iterable<Channel>): void {
+    for (const channel of channels) {
+      if (this.globalMuted || channel.muted) this.stopOutgoing(channel);
+      this.applyGain(channel);
+    }
+  }
+
   protected applyGain(channel: Channel): void {
     const head = channel.head;
     if (!head?.element) return;
-    const gain = channel.effectiveGain(this.globalVolume);
+    const gain = channel.effectiveGain(this.masterGain());
     if (head.route) {
       this.webAudio.setGain(head.route, gain);
     } else {
@@ -1155,7 +1169,7 @@ export class QueueEngine {
       progress: duration > 0 ? Math.min(1, currentTime / duration) : 0,
       remainingInQueue: Math.max(0, channel.items.length - 1),
       src: item.src,
-      volume: channel.effectiveGain(this.globalVolume)
+      volume: channel.effectiveGain(this.masterGain())
     };
   }
 

@@ -24,6 +24,32 @@ const sourceFiles = () =>
     .filter((name) => name.endsWith('.ts'))
     .map((name) => join(root, 'src', name));
 
+/** A type written with a string index: `Record<string, T>` or `{ [key: string]: T }`. */
+const STRING_INDEX = /\bRecord<\s*string\b|\[\s*\w+\s*:\s*string\s*\]/;
+
+/** Whether a property assignment is a key of an object literal typed with a string index. */
+const isLookupTableKey = (node) => {
+  if (!ts.isPropertyAssignment(node) && !ts.isShorthandPropertyAssignment(node)) return false;
+  const literal = node.parent;
+  if (!ts.isObjectLiteralExpression(literal)) return false;
+  let holder = literal.parent;
+  while (
+    holder &&
+    (ts.isAsExpression(holder) ||
+      ts.isSatisfiesExpression(holder) ||
+      ts.isParenthesizedExpression(holder))
+  ) {
+    if (holder.type && STRING_INDEX.test(holder.type.getText())) return true;
+    holder = holder.parent;
+  }
+  return Boolean(
+    holder &&
+    ts.isVariableDeclaration(holder) &&
+    holder.type &&
+    STRING_INDEX.test(holder.type.getText())
+  );
+};
+
 /** Property-like names declared in src, plus every string literal (reserved). */
 const scanSource = () => {
   const declared = new Set();
@@ -49,7 +75,10 @@ const scanSource = () => {
       // do not own, so their member names must keep their real spelling.
       const describesHostObject = node.parent !== undefined && ts.isTypeLiteralNode(node.parent);
       if (isMember && !describesHostObject && name && ts.isIdentifier(name)) {
-        declared.add(name.text);
+        // Keys of a lookup table (an object typed with a string index) are looked up with
+        // runtime strings, so renaming them would break the lookup: keep them.
+        if (isLookupTableKey(node)) strings.add(name.text);
+        else declared.add(name.text);
       }
       if (ts.isStringLiteralLike(node)) strings.add(node.text);
       ts.forEachChild(node, visit);

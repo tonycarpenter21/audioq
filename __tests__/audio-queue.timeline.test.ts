@@ -298,6 +298,35 @@ describe('crossfade', () => {
     expect(b.volume).toBeCloseTo(1);
   });
 
+  test('muting during a crossfade silences the fading item at once', async () => {
+    const queue = setup();
+    queue.setCrossfade(0, 1000);
+    await queue.queueAudio('/a.mp3');
+    await queue.queueAudio('/b.mp3');
+    await flush();
+    const [a, b] = [audioAt(0), audioAt(1)];
+    await advance(9300, 100);
+    expect(a.volume).toBeGreaterThan(0);
+    queue.setMuted(true);
+    expect(a.src).toBe('');
+    expect(b.volume).toBe(0);
+    await advance(800, 16);
+    expect(b.volume).toBe(0);
+    queue.setMuted(false);
+    expect(b.volume).toBeCloseTo(1);
+  });
+
+  test('muting another channel leaves a crossfade alone', async () => {
+    const queue = setup();
+    queue.setCrossfade(0, 1000);
+    await queue.queueAudio('/a.mp3');
+    await queue.queueAudio('/b.mp3');
+    await flush();
+    await advance(9300, 100);
+    queue.setChannelMuted(1, true);
+    expect(audioAt(0).src).not.toBe('');
+  });
+
   test('is limited to half of a short item', async () => {
     const queue = setup();
     queue.setCrossfade(0, 5000);

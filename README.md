@@ -282,6 +282,14 @@ await setGlobalVolume(0.5); // master volume
 console.log(getChannelVolume(1), getAllChannelsVolume(), getGlobalVolume());
 ```
 
+Muting keeps every volume, so unmuting restores the mix exactly. Audio keeps playing.
+
+```ts
+setMuted(!isMuted()); // a mute button
+setChannelMuted(0, true); // just the music
+console.log(isChannelMuted(0));
+```
+
 ### Ducking
 
 Lower every other channel while a priority channel (for example voice) has audio queued. Channels

@@ -46,8 +46,11 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   cues report enter and exit, point cues fire once; timed precisely and follow seeks.
   `parseWebVtt` turns a .vtt caption file into cues (tree-shakable).
 - **Crossfade**: `setCrossfade(channel, ms)` overlaps consecutive items.
+- **Muting**: `setMuted`/`isMuted` and `setChannelMuted`/`isChannelMuted` keep volumes, so
+  unmuting restores the mix.
 - **Preloading**: `preloadAudio`, `isAudioPreloaded` and `releasePreloadedAudio` keep files in
-  memory for instant, offline-capable playback; queued items use them automatically.
+  memory for instant, offline-capable playback; queued items use them automatically. Files
+  served with a generic Content-Type get their audio type from the extension (for Safari).
 - **`createChannelStore`**: a channel's state as a store for React (`useSyncExternalStore`),
   Svelte, Vue and Solid (tree-shakable).
 - **OS pause/play detection**: when a phone call, unplugged headphones, the lock screen or Control

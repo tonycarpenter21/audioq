@@ -355,7 +355,7 @@ export interface FakeFetch {
   /** Fails the pending request for a URL. */
   fail: (url: string, error?: unknown) => void;
   /** Answers the pending request for a URL. */
-  respond: (url: string, body?: string, status?: number) => void;
+  respond: (url: string, body?: string, status?: number, type?: string) => void;
 }
 
 /** Installs a fake global `fetch`. Requests are aborted through their AbortSignal like real ones. */
@@ -375,9 +375,9 @@ export const installFakeFetch = (): FakeFetch => {
   return {
     calls,
     fail: (url, error = new TypeError('Failed to fetch')) => next(url)?.reject(error),
-    respond: (url, body = 'audio-bytes', status = 200) =>
+    respond: (url, body = 'audio-bytes', status = 200, type = 'audio/mpeg') =>
       next(url)?.resolve({
-        blob: () => Promise.resolve(new Blob([body], { type: 'audio/mpeg' })),
+        blob: () => Promise.resolve(new Blob([body], { type })),
         ok: status >= 200 && status < 300,
         status
       })

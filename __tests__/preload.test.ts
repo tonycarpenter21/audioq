@@ -4,7 +4,12 @@
 import { createAudioQueue } from '../src/audio-queue';
 import type { AudioQueue } from '../src/audio-queue';
 import { getDefaultAudioQueue } from '../src/default-queue';
-import { isAudioPreloaded, preloadAudio, releasePreloadedAudio } from '../src/preload';
+import {
+  isAudioPreloaded,
+  preloadAudio,
+  releasePreloadedAudio,
+  withMediaType
+} from '../src/preload';
 import type { QueueConfig } from '../src/types';
 import {
   DESKTOP_UA,
@@ -277,5 +282,44 @@ describe('preloaded items and the rest of the queue', () => {
     await queue.queueAudio('/a.mp3', 0, { dedupeMs: 1000 });
     const again = await queue.queueAudio('/a.mp3', 0, { dedupeMs: 1000 });
     await expect(again.finished).resolves.toBe('skipped');
+  });
+});
+
+describe('withMediaType', () => {
+  test('keeps audio and video types', () => {
+    const blob = new Blob(['x'], { type: 'audio/ogg' });
+    expect(withMediaType(blob, '/a.mp3')).toBe(blob);
+    const video = new Blob(['x'], { type: 'video/mp4' });
+    expect(withMediaType(video, '/a.mp3')).toBe(video);
+  });
+
+  test.each([
+    ['/a.mp3', 'audio/mpeg'],
+    ['/a.M4A?v=2', 'audio/mp4'],
+    ['https://cdn.example.com/b.ogg#t=1', 'audio/ogg'],
+    ['/c.wav', 'audio/wav'],
+    ['/d.opus', 'audio/ogg'],
+    ['/e.webm', 'audio/webm'],
+    ['/f.flac', 'audio/flac'],
+    ['/g.aac', 'audio/aac']
+  ])('retypes a generic download from %s as %s', (url, type) => {
+    const blob = new Blob(['x'], { type: 'application/octet-stream' });
+    expect(withMediaType(blob, url).type).toBe(type);
+  });
+
+  test('leaves unknown or missing extensions alone', () => {
+    const blob = new Blob(['x']);
+    expect(withMediaType(blob, '/stream')).toBe(blob);
+    expect(withMediaType(blob, '/file.xyz')).toBe(blob);
+  });
+
+  test('a file served with a generic type is stored with its audio type', async () => {
+    const queue = setup();
+    const done = preloadAudio('/song.mp3', queue);
+    await flush();
+    net.respond(`${BASE}/song.mp3`, 'abc', 200, 'application/octet-stream');
+    await done;
+    await queue.queueAudio('/song.mp3');
+    expect((urls.create.mock.calls[0] as unknown[])[0]).toMatchObject({ type: 'audio/mpeg' });
   });
 });

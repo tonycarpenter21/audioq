@@ -134,7 +134,7 @@ export const destroyChannel = (channelNumber?: number): Promise<void> =>
   getDefaultAudioQueue().destroyChannel(channelNumber);
 
 /**
- * Destroys every channel, removes all listeners, resets global volume and ducking, releases
+ * Destroys every channel, removes all listeners, resets global volume, muting and ducking, releases
  * preloaded files, and closes the shared AudioContext. The queue can still be used afterwards.
  */
 export const destroyAllChannels = (): Promise<void> => getDefaultAudioQueue().destroyAllChannels();
@@ -386,6 +386,39 @@ export const setGlobalVolume = (volume: number): Promise<void> =>
  * @returns Global volume (0-1)
  */
 export const getGlobalVolume = (): number => getDefaultAudioQueue().getGlobalVolume();
+
+/**
+ * Mutes or unmutes everything. Volumes are kept, so unmuting restores them exactly, and audio
+ * keeps playing (muting is not pausing).
+ * @param muted - Whether to mute
+ * @example
+ * ```ts
+ * muteButton.onclick = () => setMuted(!isMuted());
+ * ```
+ */
+export const setMuted = (muted: boolean): void => getDefaultAudioQueue().setMuted(muted);
+
+/**
+ * Whether everything is muted with `setMuted`.
+ * @returns True when muted
+ */
+export const isMuted = (): boolean => getDefaultAudioQueue().isMuted();
+
+/**
+ * Mutes or unmutes one channel, keeping its volume.
+ * @param channelNumber - Channel
+ * @param muted - Whether to mute
+ */
+export const setChannelMuted = (channelNumber: number, muted: boolean): void =>
+  getDefaultAudioQueue().setChannelMuted(channelNumber, muted);
+
+/**
+ * Whether a channel is muted with `setChannelMuted` (global muting is reported by `isMuted`).
+ * @param channelNumber - Channel (defaults to 0)
+ * @returns True when the channel is muted
+ */
+export const isChannelMuted = (channelNumber?: number): boolean =>
+  getDefaultAudioQueue().isChannelMuted(channelNumber);
 
 /**
  * Lowers every other channel while the priority channel has audio queued.

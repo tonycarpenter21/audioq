@@ -589,3 +589,82 @@ describe('loading state', () => {
     expect(queue.getCurrentAudioInfo()?.isLoading).toBe(false);
   });
 });
+
+describe('muting', () => {
+  test('setMuted silences everything and restores the exact volumes', async () => {
+    const queue = setup();
+    await queue.setChannelVolume(0, 0.6);
+    await queue.queueAudio('/a.mp3', 0, { volume: 0.5 });
+    await queue.queueAudio('/b.mp3', 1);
+    await flush();
+    queue.setMuted(true);
+    expect(queue.isMuted()).toBe(true);
+    expect(audioAt(0).volume).toBe(0);
+    expect(audioAt(1).volume).toBe(0);
+    expect(queue.getChannelVolume(0)).toBe(0.6);
+    expect(queue.getCurrentAudioInfo(0)?.volume).toBe(0);
+    expect(audioAt(0).paused).toBe(false); // muting is not pausing
+    queue.setMuted(false);
+    expect(queue.isMuted()).toBe(false);
+    expect(audioAt(0).volume).toBeCloseTo(0.3);
+    expect(audioAt(1).volume).toBeCloseTo(1);
+  });
+
+  test('items that start while muted start silent', async () => {
+    const queue = setup();
+    queue.setMuted(true);
+    await queue.queueAudio('/a.mp3');
+    await flush();
+    expect(audioAt(0).volume).toBe(0);
+    await queue.setGlobalVolume(0.5);
+    expect(audioAt(0).volume).toBe(0);
+    queue.setMuted(false);
+    expect(audioAt(0).volume).toBeCloseTo(0.5);
+  });
+
+  test('setChannelMuted mutes one channel and lasts across items', async () => {
+    const queue = setup();
+    await queue.queueAudio('/a.mp3', 0);
+    await queue.queueAudio('/b.mp3', 0);
+    await queue.queueAudio('/c.mp3', 1);
+    await flush();
+    queue.setChannelMuted(0, true);
+    expect(queue.isChannelMuted(0)).toBe(true);
+    expect(queue.isChannelMuted(1)).toBe(false);
+    expect(audioAt(0).volume).toBe(0);
+    expect(audioAt(2).volume).toBeCloseTo(1);
+    audioAt(0).finish();
+    await flush();
+    expect(audioAt(1).volume).toBe(0);
+    queue.setChannelMuted(0, false);
+    expect(audioAt(1).volume).toBeCloseTo(1);
+  });
+
+  test('a channel can be muted before it is used; unknown channels report unmuted', () => {
+    const queue = setup();
+    expect(queue.isChannelMuted(5)).toBe(false);
+    expect(queue.isChannelMuted()).toBe(false);
+    queue.setChannelMuted(5, true);
+    expect(queue.isChannelMuted(5)).toBe(true);
+    expect(() => queue.setChannelMuted(-1, true)).toThrow(RangeError);
+  });
+
+  test('ducking and fades still apply after unmuting', async () => {
+    const queue = setup();
+    queue.setVolumeDucking({ duckingVolume: 0.2, priorityChannel: 1, priorityVolume: 1 });
+    await queue.queueAudio('/music.mp3', 0);
+    await queue.queueAudio('/voice.mp3', 1);
+    await flush();
+    await advance(400);
+    queue.setMuted(true);
+    queue.setMuted(false);
+    expect(audioAt(0).volume).toBeCloseTo(0.2);
+  });
+
+  test('destroyAllChannels unmutes', async () => {
+    const queue = setup();
+    queue.setMuted(true);
+    await queue.destroyAllChannels();
+    expect(queue.isMuted()).toBe(false);
+  });
+});

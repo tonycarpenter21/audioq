@@ -14,6 +14,38 @@ const list = (sources: string | readonly string[]): readonly string[] =>
 
 const urlOf = (source: string): string => resolveUrl(source.trim());
 
+/**
+ * Media types by file extension, for servers that send a generic Content-Type. A Map with string
+ * keys, because the build renames identifier-like object keys.
+ */
+const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
+  ['aac', 'audio/aac'],
+  ['flac', 'audio/flac'],
+  ['m4a', 'audio/mp4'],
+  ['mp3', 'audio/mpeg'],
+  ['mp4', 'audio/mp4'],
+  ['oga', 'audio/ogg'],
+  ['ogg', 'audio/ogg'],
+  ['opus', 'audio/ogg'],
+  ['wav', 'audio/wav'],
+  ['weba', 'audio/webm'],
+  ['webm', 'audio/webm']
+]);
+
+/**
+ * Gives a downloaded file an audio media type when the server did not (Safari may refuse to play
+ * a blob: URL typed application/octet-stream).
+ * @param blob - Downloaded file
+ * @param url - Its URL
+ * @returns The blob, retyped from the extension when needed
+ */
+export const withMediaType = (blob: Blob, url: string): Blob => {
+  if (/^(audio|video)\//.test(blob.type)) return blob;
+  const extension = /\.([a-z\d]+)(?:[?#]|$)/i.exec(url)?.[1]?.toLowerCase();
+  const type = extension === undefined ? undefined : MEDIA_TYPES.get(extension);
+  return type === undefined ? blob : new Blob([blob], { type });
+};
+
 /** Fetches a file as a Blob, giving up after `timeoutMs` (0 never gives up). */
 const download = (url: string, timeoutMs: number): Promise<Blob> => {
   if (typeof fetch === 'undefined') {
@@ -27,6 +59,7 @@ const download = (url: string, timeoutMs: number): Promise<Blob> => {
       if (!response.ok) throw new Error(`HTTP ${String(response.status)} loading ${url}`);
       return response.blob();
     })
+    .then((blob) => withMediaType(blob, url))
     .finally(() => clearTimeout(timer));
 };
 
