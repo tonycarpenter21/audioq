@@ -14,6 +14,18 @@ describe('package entry point', () => {
     expect(audioq.parseWebVtt('')).toEqual([]);
     expect(audioq.parseVttTimestamp('00:01.000')).toBe(1000);
     expect(typeof audioq.getDefaultAudioQueue).toBe('function');
+    expect(typeof audioq.createChannelStore).toBe('function');
+    expect(typeof audioq.preloadAudio).toBe('function');
+    expect(audioq.isAudioPreloaded('/never.mp3')).toBe(false);
+    expect(typeof audioq.releasePreloadedAudio).toBe('function');
+  });
+
+  test('every export is defined', () => {
+    // A re-export of a name that no longer exists compiles to an undefined value.
+    const undefinedExports = Object.entries(audioq as Record<string, unknown>)
+      .filter(([, value]) => value === undefined)
+      .map(([name]) => name);
+    expect(undefinedExports).toEqual([]);
   });
 
   test('exports helpers, enums and constants', () => {

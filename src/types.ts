@@ -400,6 +400,18 @@ export interface QueuedAudio {
   started: Promise<boolean>;
 }
 
+/** The outcome of preloading one file with `preloadAudio`. */
+export interface PreloadResult {
+  /** Size of the downloaded file in bytes (0 when it failed). */
+  bytes: number;
+  /** Why it failed (network error, HTTP status, timeout, missing CORS headers). */
+  error?: Error | undefined;
+  /** Whether the file is now in memory. */
+  ok: boolean;
+  /** The resolved URL. */
+  src: string;
+}
+
 /** Information about Web Audio API use. */
 export interface WebAudioSupport {
   /** Whether the Web Audio API exists in this environment. */

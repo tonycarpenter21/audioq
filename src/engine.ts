@@ -20,6 +20,7 @@ import {
   mergeQueueConfig
 } from './config.js';
 import { Emitter } from './emitter.js';
+import { peekMemory } from './memory.js';
 import {
   categorizeMediaError,
   categorizePlayError,
@@ -214,16 +215,7 @@ export class QueueEngine {
     channelNumber: number,
     options: AudioQueueOptions
   ): { handle: QueuedAudio; item: Item } {
-    const isBlob = typeof Blob !== 'undefined' && source instanceof Blob;
-    const objectUrl = isBlob ? URL.createObjectURL(source) : undefined;
-    const src = objectUrl ?? resolveUrl(String(source));
-    const blobName = isBlob ? (source as Blob & { name?: unknown }).name : undefined;
-    const fileName =
-      typeof blobName === 'string' && blobName.length > 0
-        ? blobName
-        : isBlob
-          ? (options.metadata?.title ?? 'audio')
-          : extractFileName(src);
+    const { fileName, objectUrl, src } = this.resolveSource(source, options);
     const startAt = Number.isFinite(options.startAt) ? Math.max(0, options.startAt as number) : 0;
     const endAt = options.endAt;
     if (endAt !== undefined && !(Number.isFinite(endAt) && endAt > startAt)) {
@@ -243,6 +235,27 @@ export class QueueEngine {
       startAt,
       volume: clampUnit(options.volume ?? 1)
     });
+  }
+
+  /**
+   * Works out where an item plays from. Blobs and preloaded URLs play from memory through an
+   * object URL owned by the item; `src` stays the URL the caller gave.
+   */
+  protected resolveSource(
+    source: AudioSource,
+    options: AudioQueueOptions
+  ): { fileName: string; objectUrl: string | undefined; src: string } {
+    if (typeof Blob !== 'undefined' && source instanceof Blob) {
+      const objectUrl = URL.createObjectURL(source);
+      const name = (source as Blob & { name?: unknown }).name;
+      const fileName =
+        typeof name === 'string' && name.length > 0 ? name : (options.metadata?.title ?? 'audio');
+      return { fileName, objectUrl, src: objectUrl };
+    }
+    const src = resolveUrl(String(source));
+    const memory = peekMemory(this)?.files.get(src);
+    const objectUrl = memory === undefined ? undefined : URL.createObjectURL(memory);
+    return { fileName: extractFileName(src), objectUrl, src };
   }
 
   /** Creates an item plus its public handle from already-normalized settings. */
@@ -362,7 +375,7 @@ export class QueueEngine {
     element.loop = item.loop && item.endAt === undefined;
     element.preservesPitch = true;
     if (item.crossOrigin !== undefined) element.crossOrigin = item.crossOrigin;
-    element.src = item.src;
+    element.src = item.objectUrl ?? item.src;
     item.element = element;
     const whenHead =
       (action: () => void): (() => void) =>
@@ -419,7 +432,8 @@ export class QueueEngine {
     const pageUrl = typeof location === 'undefined' ? undefined : location.href;
     // Cross-origin media without CORS plays as silence through Web Audio, so only route sources
     // that are same-origin or explicitly loaded with CORS.
-    if (item.crossOrigin === undefined && !isSameOriginSource(item.src, pageUrl)) return;
+    const elementSource = item.objectUrl ?? item.src;
+    if (item.crossOrigin === undefined && !isSameOriginSource(elementSource, pageUrl)) return;
     item.route = this.webAudio.connect(element, channel.effectiveGain(this.globalVolume));
   }
 

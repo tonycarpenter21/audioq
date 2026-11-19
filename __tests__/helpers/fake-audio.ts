@@ -332,3 +332,63 @@ export const IPHONE_UA: string =
 /** Desktop Chrome user agent. */
 export const DESKTOP_UA: string =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36';
+
+/** What a fake `fetch` call resolves with (the parts preloadAudio reads). */
+interface FakeResponse {
+  blob: () => Promise<Blob>;
+  ok: boolean;
+  status: number;
+}
+
+interface PendingFetch {
+  reject: (error: unknown) => void;
+  resolve: (response: FakeResponse) => void;
+}
+
+/**
+ * A controllable `fetch`: each call waits until the test responds to or fails that URL. Requests
+ * for the same URL are answered oldest first.
+ */
+export interface FakeFetch {
+  /** URLs requested, in order. */
+  calls: string[];
+  /** Fails the pending request for a URL. */
+  fail: (url: string, error?: unknown) => void;
+  /** Answers the pending request for a URL. */
+  respond: (url: string, body?: string, status?: number) => void;
+}
+
+/** Installs a fake global `fetch`. Requests are aborted through their AbortSignal like real ones. */
+export const installFakeFetch = (): FakeFetch => {
+  const pending = new Map<string, PendingFetch[]>();
+  const next = (url: string): PendingFetch | undefined => pending.get(url)?.shift();
+  const calls: string[] = [];
+  const fetch = (url: string, init?: { signal?: AbortSignal }): Promise<FakeResponse> =>
+    new Promise<FakeResponse>((resolve, reject) => {
+      calls.push(url);
+      pending.set(url, [...(pending.get(url) ?? []), { reject, resolve }]);
+      init?.signal?.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted', 'AbortError'));
+      });
+    });
+  Object.defineProperty(globalThis, 'fetch', { configurable: true, value: fetch, writable: true });
+  return {
+    calls,
+    fail: (url, error = new TypeError('Failed to fetch')) => next(url)?.reject(error),
+    respond: (url, body = 'audio-bytes', status = 200) =>
+      next(url)?.resolve({
+        blob: () => Promise.resolve(new Blob([body], { type: 'audio/mpeg' })),
+        ok: status >= 200 && status < 300,
+        status
+      })
+  };
+};
+
+/** Removes the global `fetch` (like an old browser or a server without it). */
+export const removeFetch = (): void => {
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    value: undefined,
+    writable: true
+  });
+};

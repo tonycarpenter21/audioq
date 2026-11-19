@@ -83,6 +83,18 @@
     "kind": "function",
     "signature": "(channelNumber: number) => void"
   },
+  "ChannelState": {
+    "kind": "interface",
+    "signature": "{ channelNumber: number; current: AudioInfo | null; isPaused: boolean; items: readonly QueueItem[] }"
+  },
+  "ChannelStateListener": {
+    "kind": "type",
+    "signature": "(state: ChannelState) => void"
+  },
+  "ChannelStore": {
+    "kind": "interface",
+    "signature": "{ getSnapshot: () => ChannelState; subscribe: (listener: ChannelStateListener) => Unsubscribe }"
+  },
   "clearHistory": {
     "kind": "function",
     "signature": "(channelNumber?: number | undefined) => void"
@@ -106,6 +118,10 @@
   "createAudioQueue": {
     "kind": "function",
     "signature": "(config?: Partial<QueueConfig>) => AudioQueue"
+  },
+  "createChannelStore": {
+    "kind": "function",
+    "signature": "(channelNumber?: number, queue?: AudioQueue | undefined) => ChannelStore"
   },
   "defineSprite": {
     "kind": "function",
@@ -210,6 +226,10 @@
   "HistoryEntry": {
     "kind": "interface",
     "signature": "{ channelNumber: number; fileName: string; finishedAt: number; id: number; metadata: AudioMetadata | undefined; playedMs: number; reason: CompletionReason; src: string }"
+  },
+  "isAudioPreloaded": {
+    "kind": "function",
+    "signature": "(source: string, queue?: AudioQueue) => boolean"
   },
   "isChannelPaused": {
     "kind": "function",
@@ -331,6 +351,14 @@
     "kind": "const",
     "signature": "readonly [number, number]"
   },
+  "preloadAudio": {
+    "kind": "function",
+    "signature": "(sources: string | readonly string[], queue?: AudioQueue) => Promise<PreloadResult[]>"
+  },
+  "PreloadResult": {
+    "kind": "interface",
+    "signature": "{ bytes: number; error?: Error | undefined; ok: boolean; src: string }"
+  },
   "ProgressCallback": {
     "kind": "type",
     "signature": "(info: AudioInfo) => void"
@@ -366,6 +394,10 @@
   "QueueSnapshot": {
     "kind": "interface",
     "signature": "{ channelNumber: number; currentIndex: number; isPaused: boolean; items: QueueItem[]; totalItems: number; volume: number }"
+  },
+  "releasePreloadedAudio": {
+    "kind": "function",
+    "signature": "(sources?: string | readonly string[] | undefined, queue?: AudioQueue) => void"
   },
   "removeQueuedItem": {
     "kind": "function",

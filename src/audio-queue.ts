@@ -18,6 +18,7 @@ import {
   validateVolumeConfig
 } from './config.js';
 import { resolveUrl } from './media.js';
+import { forgetMemory } from './memory.js';
 import { startTween } from './tween.js';
 import {
   EasingType,
@@ -206,8 +207,8 @@ export class AudioQueue extends QueueEngine {
   }
 
   /**
-   * Destroys every channel, removes all listeners, resets global volume and ducking, and closes
-   * the shared AudioContext. The queue can still be used afterwards.
+   * Destroys every channel, removes all listeners, resets global volume and ducking, releases
+   * preloaded files, and closes the shared AudioContext. The queue can still be used afterwards.
    */
   async destroyAllChannels(): Promise<void> {
     // Synchronous on purpose (React effect cleanups do not await): anything queued or subscribed
@@ -218,6 +219,7 @@ export class AudioQueue extends QueueEngine {
     this.globalVolume = 1;
     this.disarmUnlock();
     this.webAudio.close();
+    forgetMemory(this);
   }
 
   // ---------------------------------------------------------------- queue manipulation

@@ -349,6 +349,52 @@ console.log(getAllChannelsInfo());
 console.log(extractFileName('https://cdn.example.com/a%20b.mp3')); // 'a b.mp3'
 ```
 
+### UI frameworks
+
+`createChannelStore` turns a channel into a store with `subscribe` and `getSnapshot`. It works
+with React's `useSyncExternalStore`, is a Svelte store as is, and fits Vue or Solid in two lines.
+It only listens while subscribed and only reports visible changes.
+
+```tsx
+const music = createChannelStore(0); // once, outside components
+
+function NowPlaying() {
+  const { current, isPaused, items } = useSyncExternalStore(music.subscribe, music.getSnapshot);
+  return (
+    <p>
+      {current ? `${current.fileName} ${isPaused ? '(paused)' : ''}` : 'Nothing playing'} ·{' '}
+      {items.length} queued
+    </p>
+  );
+}
+```
+
+```svelte
+<p>{$music.current?.fileName ?? 'Nothing playing'}</p>
+```
+
+## Preloading
+
+`preloadAudio` downloads files into memory, so they start instantly, keep working offline and
+seek without the server's Range support (handy for sprites). Items queued with a preloaded URL
+play from memory automatically. It never rejects; each result says whether it worked, and a file
+that failed still plays from the network.
+
+```ts
+const results = await preloadAudio(['/sfx/sprite.mp3', '/music/level-1.mp3']);
+console.log(
+  results.every((result) => result.ok),
+  isAudioPreloaded('/sfx/sprite.mp3')
+);
+await queueAudio('/sfx/sprite.mp3'); // plays from memory
+releasePreloadedAudio('/music/level-1.mp3'); // free memory; playing sounds keep playing
+```
+
+Files from another origin need CORS headers. Downloads time out after `loadTimeoutMs`. For a queue
+made with `createAudioQueue`, pass it last: `preloadAudio(urls, queue)`, as with
+`createChannelStore(channel, queue)` and `defineSprite(src, map, queue)`.
+Preloaded CDN files can also be routed through Web Audio on iOS, so their volume works there.
+
 ## Errors
 
 A file that fails to load or play is reported through `onAudioError` and skipped; the next item

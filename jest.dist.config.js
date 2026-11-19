@@ -18,7 +18,9 @@ module.exports = {
     '**/__tests__/default-queue.test.ts',
     '**/__tests__/index.test.ts',
     '**/__tests__/media-session.test.ts',
+    '**/__tests__/preload.test.ts',
     '**/__tests__/sprite.test.ts',
+    '**/__tests__/store.test.ts',
     '**/__tests__/webvtt.test.ts',
     '**/__tests__/integration/*.test.ts'
   ]
