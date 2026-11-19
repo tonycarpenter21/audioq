@@ -13,6 +13,7 @@ import { Channel } from './channel.js';
 import type { Item } from './channel.js';
 import {
   DEFAULT_DUCK_TRANSITION_MS,
+  PLAYBACK_RATE_RANGE,
   clampPlaybackRate,
   defaultQueueConfig,
   getFadeConfig,
@@ -37,6 +38,8 @@ import {
   type AudioCompleteInfo,
   type AudioErrorInfo,
   type AudioInfo,
+  type AudioCue,
+  type AudioCueInfo,
   type AudioQueueOptions,
   type AudioSource,
   type AudioStartInfo,
@@ -53,6 +56,7 @@ import {
   assertChannelNumber,
   clampUnit,
   extractFileName,
+  MAX_TIMER_MS,
   secondsToMs,
   settleWithin
 } from './utils.js';
@@ -61,6 +65,7 @@ import { WebAudioEngine, shouldUseWebAudio } from './web-audio.js';
 /** Events emitted by a queue, with their payloads. */
 export interface QueueEvents {
   complete: AudioCompleteInfo;
+  cue: AudioCueInfo;
   error: AudioErrorInfo;
   pause: AudioInfo;
   progress: AudioInfo;
@@ -75,6 +80,61 @@ export interface QueueEvents {
  */
 const UNLOCK_EVENTS: readonly string[] = ['mousedown', 'keydown', 'pointerup', 'touchend'];
 const PROGRESS_EVENTS: readonly string[] = ['timeupdate', 'loadedmetadata', 'pause'];
+/** Events after which the position tracker re-plans its next wake-up. */
+const POSITION_EVENTS: readonly string[] = [
+  'playing',
+  'timeupdate',
+  'seeked',
+  'ratechange',
+  'pause'
+];
+/** How close to `endAt` counts as reaching it (timers and media clocks are not exact). */
+const END_TOLERANCE_MS = 10;
+
+/**
+ * Validates and sorts cues.
+ * @param cues - Cues given to queueAudio
+ * @returns Cues sorted by start time (the original objects)
+ */
+const normalizeCues = (cues: AudioCue[] | undefined): readonly AudioCue[] => {
+  if (cues === undefined) return [];
+  for (const cue of cues) {
+    const validStart = Number.isFinite(cue.startMs) && cue.startMs >= 0;
+    const validEnd =
+      cue.endMs === undefined || (Number.isFinite(cue.endMs) && cue.endMs > cue.startMs);
+    if (!validStart || !validEnd) {
+      throw new RangeError('Each cue needs startMs >= 0 and, if given, an endMs after startMs');
+    }
+  }
+  return [...cues].sort((a, b) => a.startMs - b.startMs);
+};
+
+/**
+ * The next position (ms) after `position` where something happens: a cue starts or ends, the
+ * segment ends, or a crossfade begins.
+ */
+const nextBoundary = (
+  item: Item,
+  position: number,
+  fadeAt: number | undefined
+): number | undefined => {
+  let next: number | undefined;
+  const consider = (value: number | undefined): void => {
+    if (value !== undefined && value > position && (next === undefined || value < next))
+      next = value;
+  };
+  consider(item.endAt);
+  consider(fadeAt);
+  item.cues.forEach((cue) => {
+    consider(cue.startMs);
+    consider(cue.endMs);
+  });
+  return next;
+};
+
+/** Crossfade length for an item: the channel setting, but at most half of the item. */
+const crossfadeLength = (channel: Channel, item: Item, end: number): number =>
+  Math.min(channel.crossfadeMs, (end - item.segmentStart) / 2);
 
 /**
  * Internal state and playback machinery shared by every AudioQueue. Not part of the public API.
@@ -162,15 +222,23 @@ export class QueueEngine {
         : isBlob
           ? (options.metadata?.title ?? 'audio')
           : extractFileName(src);
+    const startAt = Number.isFinite(options.startAt) ? Math.max(0, options.startAt as number) : 0;
+    const endAt = options.endAt;
+    if (endAt !== undefined && !(Number.isFinite(endAt) && endAt > startAt)) {
+      throw new RangeError('endAt must be a finite number of milliseconds after startAt');
+    }
     return this.buildItem(channelNumber, {
       crossOrigin: options.crossOrigin,
+      cues: normalizeCues(options.cues),
+      endAt,
       fileName,
       loop: options.loop === true,
       metadata: options.metadata,
       objectUrl,
       playbackRate: clampPlaybackRate(options.playbackRate),
+      segmentStart: startAt,
       src,
-      startAt: Number.isFinite(options.startAt) ? Math.max(0, options.startAt as number) : 0,
+      startAt,
       volume: clampUnit(options.volume ?? 1)
     });
   }
@@ -181,11 +249,14 @@ export class QueueEngine {
     settings: Pick<
       Item,
       | 'crossOrigin'
+      | 'cues'
+      | 'endAt'
       | 'fileName'
       | 'loop'
       | 'metadata'
       | 'objectUrl'
       | 'playbackRate'
+      | 'segmentStart'
       | 'src'
       | 'startAt'
       | 'volume'
@@ -197,13 +268,16 @@ export class QueueEngine {
     const finished = new Promise<ItemOutcome>((resolve) => (resolveFinished = resolve));
     const item: Item = {
       ...settings,
+      activeCues: new Set(),
       blocked: false,
       channelNumber,
       disposers: [],
       element: undefined,
       id: this.nextId++,
+      lastCueMs: -1,
       loadTimer: undefined,
       playRequested: false,
+      positionTimer: undefined,
       resolveFinished,
       resolveStarted,
       route: undefined,
@@ -273,6 +347,8 @@ export class QueueEngine {
     if (head && !channel.paused && !head.playRequested && !head.blocked && !waiting) {
       void this.play(channel, head);
     }
+    // The queue changed, so the next crossfade (which depends on there being a next item) moved.
+    if (head?.started === true) this.trackPosition(channel, head);
     this.updateDucking();
   }
 
@@ -280,7 +356,8 @@ export class QueueEngine {
     if (item.element) return item.element;
     const element = new Audio();
     element.preload = 'auto';
-    element.loop = item.loop;
+    // Segments (endAt) loop themselves; a native loop would replay the whole file.
+    element.loop = item.loop && item.endAt === undefined;
     element.preservesPitch = true;
     if (item.crossOrigin !== undefined) element.crossOrigin = item.crossOrigin;
     element.src = item.src;
@@ -313,8 +390,16 @@ export class QueueEngine {
       ),
       listen(element, 'loadedmetadata', () => this.applyStartAt(item, element)),
       listen(element, 'error', () => {
-        if (!item.settled) this.onElementError(channel, item);
+        if (channel.outgoing === item) this.stopOutgoing(channel);
+        else if (!item.settled) this.onElementError(channel, item);
       }),
+      ...POSITION_EVENTS.map((type) =>
+        listen(
+          element,
+          type,
+          whenHead(() => this.trackPosition(channel, item))
+        )
+      ),
       ...PROGRESS_EVENTS.map((type) =>
         listen(
           element,
@@ -471,6 +556,7 @@ export class QueueEngine {
     channel.pendingPause = false;
     channel.hiddenPause = false;
     channel.clearGap();
+    this.stopOutgoing(channel);
     this.resetFade(channel);
     const [head, ...rest] = removed;
     if (head) this.retire(channel, head, 'stopped', 0);
@@ -492,10 +578,12 @@ export class QueueEngine {
   /** Repeat-one: report the play-through, then play the same item again from the start. */
   protected retireForRepeat(channel: Channel, item: Item): void {
     this.report(channel, item, 'ended', channel.items.length - 1);
+    this.exitCues(item);
     item.started = false;
     item.playRequested = false;
     item.startAt = 0;
-    if (item.element) item.element.currentTime = 0;
+    item.lastCueMs = -1;
+    if (item.element) item.element.currentTime = item.segmentStart / 1000;
     this.startGap(channel);
     this.refresh(channel);
   }
@@ -504,18 +592,161 @@ export class QueueEngine {
   protected copyForRepeat(item: Item): Item {
     const { item: copy } = this.buildItem(item.channelNumber, {
       crossOrigin: item.crossOrigin,
+      cues: item.cues,
+      endAt: item.endAt,
       fileName: item.fileName,
       loop: item.loop,
       metadata: item.metadata,
       objectUrl: item.objectUrl,
       playbackRate: item.playbackRate,
+      segmentStart: item.segmentStart,
       src: item.src,
-      startAt: 0,
+      startAt: item.segmentStart,
       volume: item.volume
     });
     // The copy now owns the Blob's object URL, so releasing the original must not revoke it.
     item.objectUrl = undefined;
     return copy;
+  }
+
+  /**
+   * Handles everything tied to the playback position (cues, segment ends, crossfades) and sleeps
+   * until the next of those moments. Browsers only report the position about 4 times a second,
+   * which is too coarse for short sprites, so a timer wakes the tracker at the exact time.
+   */
+  protected trackPosition(channel: Channel, item: Item): void {
+    if (item.positionTimer !== undefined) clearTimeout(item.positionTimer);
+    item.positionTimer = undefined;
+    const element = item.element;
+    if (!element || item.settled || channel.head !== item) return;
+    const position = secondsToMs(element.currentTime);
+    this.updateCues(channel, item, position);
+    if (channel.paused || element.paused) return;
+    if (item.endAt !== undefined && position >= item.endAt - END_TOLERANCE_MS) {
+      this.reachSegmentEnd(channel, item);
+      return;
+    }
+    const fadeAt = this.crossfadeStart(channel, item, element);
+    if (fadeAt !== undefined && position >= fadeAt) {
+      this.beginCrossfade(channel, item, element);
+      return;
+    }
+    const next = nextBoundary(item, position, fadeAt);
+    if (next === undefined) return;
+    const delay = (next - position) / Math.max(element.playbackRate, PLAYBACK_RATE_RANGE[0]);
+    item.positionTimer = setTimeout(
+      () => this.trackPosition(channel, item),
+      Math.min(Math.max(delay, 0), MAX_TIMER_MS)
+    );
+  }
+
+  /** Fires enter/exit events for cues the position moved into or out of. */
+  protected updateCues(channel: Channel, item: Item, position: number): void {
+    const last = item.lastCueMs;
+    item.lastCueMs = position;
+    item.cues.forEach((cue, index) => {
+      if (cue.endMs === undefined) {
+        if (last < cue.startMs && cue.startMs <= position) this.emitCue(channel, item, index, true);
+        return;
+      }
+      const inside = position >= cue.startMs && position < cue.endMs;
+      if (inside === item.activeCues.has(index)) return;
+      if (inside) item.activeCues.add(index);
+      else item.activeCues.delete(index);
+      this.emitCue(channel, item, index, inside);
+    });
+  }
+
+  /** Ends every ranged cue still active on an item (it stopped, ended or restarted). */
+  protected exitCues(item: Item): void {
+    const channel = this.channels.get(item.channelNumber);
+    const active = [...item.activeCues];
+    item.activeCues.clear();
+    if (channel) active.forEach((index) => this.emitCue(channel, item, index, false));
+  }
+
+  protected emitCue(channel: Channel, item: Item, index: number, active: boolean): void {
+    const cue = item.cues[index];
+    if (!cue) return;
+    this.emitter.emit('cue', channel.channelNumber, {
+      active,
+      channelNumber: channel.channelNumber,
+      cue,
+      fileName: item.fileName,
+      id: item.id,
+      index,
+      metadata: item.metadata,
+      src: item.src
+    });
+  }
+
+  /** The position reached `endAt`: loop the segment, or treat it as the end of the file. */
+  protected reachSegmentEnd(channel: Channel, item: Item): void {
+    const element = item.element;
+    if (item.loop && element) {
+      this.exitCues(item);
+      item.lastCueMs = item.segmentStart - 1;
+      element.currentTime = item.segmentStart / 1000;
+      this.trackPosition(channel, item);
+      return;
+    }
+    this.onEnded(channel, item);
+  }
+
+  /** Where the crossfade into the next item should start, if one applies. */
+  protected crossfadeStart(
+    channel: Channel,
+    item: Item,
+    element: HTMLAudioElement
+  ): number | undefined {
+    const end = item.endAt ?? secondsToMs(element.duration);
+    const hasNext = channel.items.length > 1 || channel.repeat === 'all';
+    if (channel.crossfadeMs <= 0 || item.loop || channel.repeat === 'one') return undefined;
+    if (!hasNext || channel.pendingPause || !(end > item.segmentStart)) return undefined;
+    return end - crossfadeLength(channel, item, end);
+  }
+
+  /** Starts the next item fading in while this one fades out, then lets this one go. */
+  protected beginCrossfade(channel: Channel, item: Item, element: HTMLAudioElement): void {
+    const fadeMs = crossfadeLength(channel, item, item.endAt ?? secondsToMs(element.duration));
+    const startGain = channel.effectiveGain(this.globalVolume);
+    channel.items.shift();
+    if (channel.repeat === 'all') channel.items.push(this.copyForRepeat(item));
+    this.report(channel, item, 'ended', channel.items.length);
+    this.exitCues(item);
+    this.stopOutgoing(channel);
+    channel.outgoing = item;
+    const tween = startTween({
+      duration: fadeMs,
+      easing: EasingType.Linear,
+      from: startGain,
+      onUpdate: (value) => this.setItemGain(item, value),
+      to: 0
+    });
+    channel.outgoingTween = tween;
+    void tween.done.then(() => {
+      if (channel.outgoing === item) this.stopOutgoing(channel);
+    });
+    channel.fadeTween?.cancel();
+    channel.fadeFactor = 0;
+    this.emitQueueChange(channel);
+    this.refresh(channel);
+    void this.fade(channel, 1, fadeMs, EasingType.Linear);
+  }
+
+  /** Releases the item that is fading out of a crossfade, if any. */
+  protected stopOutgoing(channel: Channel): void {
+    const outgoing = channel.outgoing;
+    if (!outgoing) return;
+    channel.outgoing = undefined;
+    channel.outgoingTween?.cancel();
+    channel.outgoingTween = undefined;
+    this.finalize(outgoing, 'ended');
+  }
+
+  protected setItemGain(item: Item, gain: number): void {
+    if (item.route) this.webAudio.setGain(item.route, gain);
+    else if (item.element) item.element.volume = gain;
   }
 
   /** Waits `gapMs` before the next item starts. */
@@ -533,6 +764,7 @@ export class QueueEngine {
     if (item.settled) return;
     item.settled = true;
     item.blocked = false;
+    this.exitCues(item);
     this.unload(item);
     if (item.objectUrl !== undefined) URL.revokeObjectURL(item.objectUrl);
     item.objectUrl = undefined;
@@ -544,6 +776,8 @@ export class QueueEngine {
   /** Frees an item's element (network, decoder, listeners, Web Audio) but keeps it queued. */
   protected unload(item: Item): void {
     this.clearLoadTimer(item);
+    if (item.positionTimer !== undefined) clearTimeout(item.positionTimer);
+    item.positionTimer = undefined;
     item.disposers.forEach((dispose) => dispose());
     item.disposers = [];
     if (item.route) this.webAudio.disconnect(item.route);
@@ -705,6 +939,7 @@ export class QueueEngine {
     const head = channel.head;
     if (!head || channel.paused) return;
     channel.fadeTween?.cancel();
+    this.stopOutgoing(channel);
     channel.pendingPause = false;
     channel.paused = true;
     head.playRequested = false;

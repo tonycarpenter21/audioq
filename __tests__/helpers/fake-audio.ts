@@ -25,9 +25,10 @@ const makeDomError = (name: string, message: string): Error => {
 export class FakeAudio extends EventTarget {
   static instances: FakeAudio[] = [];
   static defaultPlayBehavior: PlayBehavior = 'resolve';
+  /** When true, currentTime advances with (fake) time while playing, like a real media clock. */
+  static mediaClock: boolean = false;
 
   crossOrigin: string | null = null;
-  currentTime: number = 0;
   duration: number = NaN;
   ended: boolean = false;
   error: { code: number; message: string } | null = null;
@@ -43,6 +44,8 @@ export class FakeAudio extends EventTarget {
   readyState: number = 0;
   volume: number = 1;
   private source: string = '';
+  private baseTime: number = 0;
+  private clockStartedAt: number | undefined;
 
   constructor(src?: string) {
     super();
@@ -54,6 +57,30 @@ export class FakeAudio extends EventTarget {
   static reset(): void {
     FakeAudio.instances = [];
     FakeAudio.defaultPlayBehavior = 'resolve';
+    FakeAudio.mediaClock = false;
+  }
+
+  get currentTime(): number {
+    if (this.clockStartedAt === undefined) return this.baseTime;
+    const elapsed = (performance.now() - this.clockStartedAt) / 1000;
+    const time = this.baseTime + elapsed * this.playbackRate;
+    return Number.isFinite(this.duration) ? Math.min(time, this.duration) : time;
+  }
+
+  set currentTime(value: number) {
+    this.baseTime = value;
+    if (this.clockStartedAt !== undefined) this.clockStartedAt = performance.now();
+    if (FakeAudio.mediaClock) this.fire('seeked');
+  }
+
+  private runClock(running: boolean): void {
+    if (!FakeAudio.mediaClock) return;
+    if (running && this.clockStartedAt === undefined) {
+      this.clockStartedAt = performance.now();
+    } else if (!running && this.clockStartedAt !== undefined) {
+      this.baseTime = this.currentTime;
+      this.clockStartedAt = undefined;
+    }
   }
 
   get src(): string {
@@ -79,6 +106,7 @@ export class FakeAudio extends EventTarget {
   pause(): void {
     this.pauseCalls++;
     if (this.paused) return;
+    this.runClock(false);
     this.paused = true;
     this.fire('pause');
   }
@@ -122,6 +150,7 @@ export class FakeAudio extends EventTarget {
 
   /** Simulates the OS or browser pausing playback (phone call, unplugged headphones). */
   externalPause(): void {
+    this.runClock(false);
     this.paused = true;
     this.fire('pause');
   }
@@ -143,6 +172,7 @@ export class FakeAudio extends EventTarget {
     if (Number.isNaN(this.duration)) this.duration = duration;
     this.readyState = 4;
     this.paused = false;
+    this.runClock(true);
     this.fire('loadedmetadata');
     this.fire('playing');
   }

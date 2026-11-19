@@ -168,6 +168,48 @@ clearHistory(0);
 so the whole queue repeats. History keeps the last `historySize` items per channel (20 by
 default).
 
+## Sprites, cues and crossfades
+
+**Audio sprites** put many short sounds in one file: one download for every sound effect.
+`endAt` (with `startAt`) plays one segment of any file; `defineSprite` names the segments.
+
+```ts
+const sfx = defineSprite('/sfx/sprite.mp3', {
+  coin: [0, 300],
+  engine: { endMs: 4000, loop: true, startMs: 1000 },
+  jump: [400, 900]
+});
+await sfx.play('coin', 2, { interrupt: true }); // rapid sounds cut each other off
+await sfx.play('engine', 3); // loops its segment until stopped
+await queueAudio('/voice/all-lines.mp3', 1, { endAt: 4200, startAt: 3000 });
+```
+
+**Cues** fire events at moments in a track: captions, karaoke lyrics, lip-sync, or visuals. A cue
+with `endMs` fires when playback enters it (`active: true`) and leaves it (`active: false`); a
+cue without `endMs` fires once. Cues fire on time (not just when the browser reports progress),
+and follow seeks.
+
+```ts
+onAudioCue(1, ({ active, cue }) => {
+  console.log(active ? `show: ${cue.text}` : 'hide caption');
+});
+await queueAudio('/voice/intro.mp3', 1, {
+  cues: [
+    { endMs: 2400, startMs: 0, text: 'Welcome back!' },
+    { data: { animation: 'wave' }, startMs: 2600 }
+  ]
+});
+offAudioCue(1);
+```
+
+**Crossfade** overlaps consecutive items: near the end of each item the next starts and fades in
+while the current one fades out (at most half of an item's length).
+
+```ts
+setCrossfade(0, 3000);
+console.log(getCrossfade(0)); // 3000
+```
+
 ## Lock screen and media controls
 
 `connectMediaSession` shows a channel's current item on the lock screen, in media notifications

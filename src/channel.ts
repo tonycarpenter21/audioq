@@ -7,6 +7,7 @@ import type { Disposer } from './media.js';
 import type { Tween } from './tween.js';
 import type { GainRoute } from './web-audio.js';
 import type {
+  AudioCue,
   AudioMetadata,
   FadeType,
   HistoryEntry,
@@ -18,12 +19,18 @@ import { secondsToMs } from './utils.js';
 
 /** One queued audio file. */
 export interface Item {
+  /** Indexes of ranged cues the playback position is currently inside. */
+  readonly activeCues: Set<number>;
   /** Set while the browser refuses playback until a user gesture. */
   blocked: boolean;
   /** Channel number. */
   readonly channelNumber: number;
   /** CORS mode for the element. */
   readonly crossOrigin: 'anonymous' | 'use-credentials' | undefined;
+  /** Cues sorted by start time. */
+  readonly cues: readonly AudioCue[];
+  /** Position (ms) where playback ends early, for segments and sprites. */
+  readonly endAt: number | undefined;
   /** Listener removers for the element. */
   disposers: Disposer[];
   /** The element; created when the item enters the prefetch window. */
@@ -32,6 +39,8 @@ export interface Item {
   readonly fileName: string;
   /** Unique id. */
   readonly id: number;
+  /** Position (ms) at the previous cue check, to detect point cues being passed. */
+  lastCueMs: number;
   /** Timer that skips the item if it does not start in time. */
   loadTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether the item loops. */
@@ -42,6 +51,8 @@ export interface Item {
   objectUrl: string | undefined;
   /** Item playback speed (multiplied with the channel rate). */
   readonly playbackRate: number;
+  /** Timer that wakes the position tracker at the next cue, segment end or crossfade. */
+  positionTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether play() has been requested since the item became current or was last paused. */
   playRequested: boolean;
   /** Settles the `finished` promise. */
@@ -54,6 +65,8 @@ export interface Item {
   settled: boolean;
   /** Resolved URL. */
   readonly src: string;
+  /** Start of the segment (ms); repeats and segment loops return here. */
+  readonly segmentStart: number;
   /** Position (ms) to start from when the item first plays. */
   startAt: number;
   /** Whether the `playing` event has fired at least once. */
@@ -78,6 +91,12 @@ export class Channel {
   duckTarget: number = 1;
   /** Running ducking transition. */
   duckTween: Tween | undefined;
+  /** Overlap between items in milliseconds (0 for none). */
+  crossfadeMs: number = 0;
+  /** The previous item while it fades out during a crossfade. */
+  outgoing: Item | undefined;
+  /** The fade-out of the outgoing item. */
+  outgoingTween: Tween | undefined;
   /** Pause/resume fade multiplier (1 when not fading). */
   fadeFactor: number = 1;
   /** Running pause/resume fade. */
@@ -181,6 +200,7 @@ export class Channel {
     this.volumeTween?.cancel();
     this.duckTween?.cancel();
     this.fadeTween?.cancel();
+    this.outgoingTween?.cancel();
     this.volumeTween = undefined;
     this.duckTween = undefined;
     this.fadeTween = undefined;

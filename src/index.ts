@@ -11,6 +11,8 @@ export { PLAYBACK_RATE_RANGE, getFadeConfig } from './config.js';
 export * from './default-queue.js';
 export { connectMediaSession } from './media-session.js';
 export type { MediaSessionOptions } from './media-session.js';
+export { defineSprite } from './sprite.js';
+export type { AudioSprite, SpriteMap, SpriteSegment } from './sprite.js';
 export { extractFileName } from './utils.js';
 export { isIOSDevice, isWebAudioSupported } from './web-audio.js';
 
@@ -18,6 +20,9 @@ export { AudioErrorType, EasingType, FadeType, MAX_CHANNELS } from './types.js';
 export type {
   AudioCompleteCallback,
   AudioCompleteInfo,
+  AudioCue,
+  AudioCueCallback,
+  AudioCueInfo,
   AudioErrorCallback,
   AudioErrorInfo,
   AudioInfo,

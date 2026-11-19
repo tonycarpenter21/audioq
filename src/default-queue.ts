@@ -7,6 +7,7 @@
 import { AudioQueue } from './audio-queue.js';
 import type {
   AudioCompleteCallback,
+  AudioCueCallback,
   AudioErrorCallback,
   AudioInfo,
   AudioPauseCallback,
@@ -506,6 +507,24 @@ export const getChannelGap = (channelNumber?: number): number =>
   getDefaultAudioQueue().getChannelGap(channelNumber);
 
 /**
+ * Overlaps consecutive items: near the end of each item the next one starts and fades in while
+ * the current one fades out. Limited to half of an item's length; ignored for looping items and
+ * with repeat mode `'one'`.
+ * @param channelNumber - Channel
+ * @param crossfadeMs - Overlap in milliseconds (0 turns crossfading off)
+ */
+export const setCrossfade = (channelNumber: number, crossfadeMs: number): void =>
+  getDefaultAudioQueue().setCrossfade(channelNumber, crossfadeMs);
+
+/**
+ * Reads a channel's crossfade length.
+ * @param channelNumber - Channel (defaults to 0)
+ * @returns Overlap in milliseconds (0 when off)
+ */
+export const getCrossfade = (channelNumber?: number): number =>
+  getDefaultAudioQueue().getCrossfade(channelNumber);
+
+/**
  * Lists the items that finished on a channel, oldest first (up to `historySize`).
  * @param channelNumber - Channel (defaults to 0)
  * @returns A copy of the history
@@ -623,6 +642,24 @@ export const onAudioResume = (channelNumber: number, callback: AudioResumeCallba
  */
 export const offAudioResume = (channelNumber?: number, callback?: AudioResumeCallback): void =>
   getDefaultAudioQueue().offAudioResume(channelNumber, callback);
+
+/**
+ * Listens for cues (from the `cues` item option) being entered and left: show a caption when
+ * `active` is true, hide it when false. Point cues (no `endMs`) only fire when entered.
+ * @param channelNumber - Channel
+ * @param callback - Listener
+ * @returns Function that removes this listener
+ */
+export const onAudioCue = (channelNumber: number, callback: AudioCueCallback): Unsubscribe =>
+  getDefaultAudioQueue().onAudioCue(channelNumber, callback);
+
+/**
+ * Removes cue listeners.
+ * @param channelNumber - Channel (defaults to 0)
+ * @param callback - Remove only this listener; omit to remove all on the channel
+ */
+export const offAudioCue = (channelNumber?: number, callback?: AudioCueCallback): void =>
+  getDefaultAudioQueue().offAudioCue(channelNumber, callback);
 
 /**
  * Listens for errors on a channel. Failed items are skipped automatically; a blocked autoplay

@@ -11,6 +11,18 @@
     "kind": "interface",
     "signature": "{ channelNumber: number; fileName: string; id: number; metadata: AudioMetadata | undefined; playedMs: number; reason: CompletionReason; remainingInQueue: number; src: string }"
   },
+  "AudioCue": {
+    "kind": "interface",
+    "signature": "{ data?: unknown; endMs?: number | undefined; startMs: number; text?: string | undefined }"
+  },
+  "AudioCueCallback": {
+    "kind": "type",
+    "signature": "(info: AudioCueInfo) => void"
+  },
+  "AudioCueInfo": {
+    "kind": "interface",
+    "signature": "{ active: boolean; channelNumber: number; cue: AudioCue; fileName: string; id: number; index: number; metadata: AudioMetadata | undefined; src: string }"
+  },
   "AudioErrorCallback": {
     "kind": "type",
     "signature": "(info: AudioErrorInfo) => void"
@@ -37,11 +49,11 @@
   },
   "AudioQueue": {
     "kind": "class",
-    "signature": "{ cancelAllVolumeTransitions: () => void; cancelVolumeTransition: (channelNumber: number) => void; clearHistory: (channelNumber?: number) => void; clearQueueAfterCurrent: (channelNumber?: number) => Promise<QueueManipulationResult>; clearVolumeDucking: () => void; destroyAllChannels: () => Promise<void>; destroyChannel: (channelNumber?: number) => Promise<void>; getAllChannelsInfo: () => (AudioInfo | null)[]; getAllChannelsPauseState: () => boolean[]; getAllChannelsVolume: () => number[]; getChannelGap: (channelNumber?: number) => number; getChannelVolume: (channelNumber?: number) => number; getCurrentAudioInfo: (channelNumber?: number) => AudioInfo | null; getGlobalVolume: () => number; getHistory: (channelNumber?: number) => HistoryEntry[]; getPlaybackRate: (channelNumber?: number) => number; getQueueConfig: () => QueueConfig; getQueueItemInfo: (queueSlotNumber: number, channelNumber?: number) => QueueItem | null; getQueueLength: (channelNumber?: number) => number; getQueueSnapshot: (channelNumber?: number) => QueueSnapshot | null; getRepeatMode: (channelNumber?: number) => RepeatMode; getWebAudioSupport: () => WebAudioSupport; isChannelPaused: (channelNumber?: number) => boolean; offAudioComplete: (channelNumber?: number, callback?: AudioCompleteCallback | undefined) => void; offAudioError: (channelNumber?: number, callback?: AudioErrorCallback | undefined) => void; offAudioPause: (channelNumber?: number, callback?: AudioPauseCallback | undefined) => void; offAudioProgress: (channelNumber?: number, callback?: ProgressCallback | undefined) => void; offAudioResume: (channelNumber?: number, callback?: AudioResumeCallback | undefined) => void; offAudioStart: (channelNumber?: number, callback?: AudioStartCallback | undefined) => void; offQueueChange: (channelNumber?: number, callback?: QueueChangeCallback | undefined) => void; onAudioComplete: (channelNumber: number, callback: AudioCompleteCallback) => Unsubscribe; onAudioError: (channelNumber: number, callback: AudioErrorCallback) => Unsubscribe; onAudioPause: (channelNumber: number, callback: AudioPauseCallback) => Unsubscribe; onAudioProgress: (channelNumber: number, callback: ProgressCallback) => Unsubscribe; onAudioResume: (channelNumber: number, callback: AudioResumeCallback) => Unsubscribe; onAudioStart: (channelNumber: number, callback: AudioStartCallback) => Unsubscribe; onQueueChange: (channelNumber: number, callback: QueueChangeCallback) => Unsubscribe; pauseAllChannels: () => Promise<void>; pauseAllWithFade: (fadeType?: FadeType, duration?: number | undefined) => Promise<void>; pauseChannel: (channelNumber?: number) => Promise<void>; pauseWithFade: (fadeType?: FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; queueAudio: (source: AudioSource, channelNumber?: number, options?: AudioQueueOptions) => Promise<QueuedAudio>; queueAudioPriority: (source: AudioSource, channelNumber?: number, options?: AudioQueueOptions) => Promise<QueuedAudio>; removeQueuedItem: (queuedSlotNumber: number, channelNumber?: number) => Promise<QueueManipulationResult>; reorderQueue: (currentQueuedSlotNumber: number, newQueuedSlotNumber: number, channelNumber?: number) => Promise<QueueManipulationResult>; resumeAllChannels: () => Promise<void>; resumeAllWithFade: (fadeType?: FadeType | undefined, duration?: number | undefined) => Promise<void>; resumeChannel: (channelNumber?: number) => Promise<void>; resumeWithFade: (fadeType?: FadeType | undefined, channelNumber?: number, duration?: number | undefined) => Promise<void>; seekBy: (channelNumber: number, offsetMs: number) => boolean; seekTo: (channelNumber: number, positionMs: number) => boolean; setAllChannelsVolume: (volume: number) => Promise<void>; setChannelGap: (channelNumber: number, gapMs: number) => void; setChannelQueueLimit: (channelNumber: number, maxSize?: number | undefined) => void; setChannelVolume: (channelNumber: number, volume: number, transitionDuration?: number | undefined, easing?: EasingType) => Promise<void>; setGlobalVolume: (volume: number) => Promise<void>; setPlaybackRate: (channelNumber: number, rate: number) => void; setQueueConfig: (config: Partial<QueueConfig>) => void; setRepeatMode: (channelNumber: number, mode: RepeatMode) => void; setVolumeDucking: (config: VolumeConfig) => void; shuffleQueue: (channelNumber?: number, random?: () => number) => Promise<QueueManipulationResult>; stopAllAudio: () => Promise<void>; stopAllAudioInChannel: (channelNumber?: number) => Promise<void>; stopCurrentAudioInChannel: (channelNumber?: number) => Promise<void>; swapQueueItems: (slotA: number, slotB: number, channelNumber?: number) => Promise<QueueManipulationResult>; togglePauseAllChannels: () => Promise<void>; togglePauseAllWithFade: (fadeType?: FadeType, duration?: number | undefined) => Promise<void>; togglePauseChannel: (channelNumber?: number) => Promise<void>; togglePauseWithFade: (fadeType?: FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; transitionVolume: (channelNumber: number, targetVolume: number, duration?: number, easing?: EasingType) => Promise<void>; unlockAudio: () => void }"
+    "signature": "{ cancelAllVolumeTransitions: () => void; cancelVolumeTransition: (channelNumber: number) => void; clearHistory: (channelNumber?: number) => void; clearQueueAfterCurrent: (channelNumber?: number) => Promise<QueueManipulationResult>; clearVolumeDucking: () => void; destroyAllChannels: () => Promise<void>; destroyChannel: (channelNumber?: number) => Promise<void>; getAllChannelsInfo: () => (AudioInfo | null)[]; getAllChannelsPauseState: () => boolean[]; getAllChannelsVolume: () => number[]; getChannelGap: (channelNumber?: number) => number; getChannelVolume: (channelNumber?: number) => number; getCrossfade: (channelNumber?: number) => number; getCurrentAudioInfo: (channelNumber?: number) => AudioInfo | null; getGlobalVolume: () => number; getHistory: (channelNumber?: number) => HistoryEntry[]; getPlaybackRate: (channelNumber?: number) => number; getQueueConfig: () => QueueConfig; getQueueItemInfo: (queueSlotNumber: number, channelNumber?: number) => QueueItem | null; getQueueLength: (channelNumber?: number) => number; getQueueSnapshot: (channelNumber?: number) => QueueSnapshot | null; getRepeatMode: (channelNumber?: number) => RepeatMode; getWebAudioSupport: () => WebAudioSupport; isChannelPaused: (channelNumber?: number) => boolean; offAudioComplete: (channelNumber?: number, callback?: AudioCompleteCallback | undefined) => void; offAudioCue: (channelNumber?: number, callback?: AudioCueCallback | undefined) => void; offAudioError: (channelNumber?: number, callback?: AudioErrorCallback | undefined) => void; offAudioPause: (channelNumber?: number, callback?: AudioPauseCallback | undefined) => void; offAudioProgress: (channelNumber?: number, callback?: ProgressCallback | undefined) => void; offAudioResume: (channelNumber?: number, callback?: AudioResumeCallback | undefined) => void; offAudioStart: (channelNumber?: number, callback?: AudioStartCallback | undefined) => void; offQueueChange: (channelNumber?: number, callback?: QueueChangeCallback | undefined) => void; onAudioComplete: (channelNumber: number, callback: AudioCompleteCallback) => Unsubscribe; onAudioCue: (channelNumber: number, callback: AudioCueCallback) => Unsubscribe; onAudioError: (channelNumber: number, callback: AudioErrorCallback) => Unsubscribe; onAudioPause: (channelNumber: number, callback: AudioPauseCallback) => Unsubscribe; onAudioProgress: (channelNumber: number, callback: ProgressCallback) => Unsubscribe; onAudioResume: (channelNumber: number, callback: AudioResumeCallback) => Unsubscribe; onAudioStart: (channelNumber: number, callback: AudioStartCallback) => Unsubscribe; onQueueChange: (channelNumber: number, callback: QueueChangeCallback) => Unsubscribe; pauseAllChannels: () => Promise<void>; pauseAllWithFade: (fadeType?: FadeType, duration?: number | undefined) => Promise<void>; pauseChannel: (channelNumber?: number) => Promise<void>; pauseWithFade: (fadeType?: FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; queueAudio: (source: AudioSource, channelNumber?: number, options?: AudioQueueOptions) => Promise<QueuedAudio>; queueAudioPriority: (source: AudioSource, channelNumber?: number, options?: AudioQueueOptions) => Promise<QueuedAudio>; removeQueuedItem: (queuedSlotNumber: number, channelNumber?: number) => Promise<QueueManipulationResult>; reorderQueue: (currentQueuedSlotNumber: number, newQueuedSlotNumber: number, channelNumber?: number) => Promise<QueueManipulationResult>; resumeAllChannels: () => Promise<void>; resumeAllWithFade: (fadeType?: FadeType | undefined, duration?: number | undefined) => Promise<void>; resumeChannel: (channelNumber?: number) => Promise<void>; resumeWithFade: (fadeType?: FadeType | undefined, channelNumber?: number, duration?: number | undefined) => Promise<void>; seekBy: (channelNumber: number, offsetMs: number) => boolean; seekTo: (channelNumber: number, positionMs: number) => boolean; setAllChannelsVolume: (volume: number) => Promise<void>; setChannelGap: (channelNumber: number, gapMs: number) => void; setChannelQueueLimit: (channelNumber: number, maxSize?: number | undefined) => void; setChannelVolume: (channelNumber: number, volume: number, transitionDuration?: number | undefined, easing?: EasingType) => Promise<void>; setCrossfade: (channelNumber: number, crossfadeMs: number) => void; setGlobalVolume: (volume: number) => Promise<void>; setPlaybackRate: (channelNumber: number, rate: number) => void; setQueueConfig: (config: Partial<QueueConfig>) => void; setRepeatMode: (channelNumber: number, mode: RepeatMode) => void; setVolumeDucking: (config: VolumeConfig) => void; shuffleQueue: (channelNumber?: number, random?: () => number) => Promise<QueueManipulationResult>; stopAllAudio: () => Promise<void>; stopAllAudioInChannel: (channelNumber?: number) => Promise<void>; stopCurrentAudioInChannel: (channelNumber?: number) => Promise<void>; swapQueueItems: (slotA: number, slotB: number, channelNumber?: number) => Promise<QueueManipulationResult>; togglePauseAllChannels: () => Promise<void>; togglePauseAllWithFade: (fadeType?: FadeType, duration?: number | undefined) => Promise<void>; togglePauseChannel: (channelNumber?: number) => Promise<void>; togglePauseWithFade: (fadeType?: FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; transitionVolume: (channelNumber: number, targetVolume: number, duration?: number, easing?: EasingType) => Promise<void>; unlockAudio: () => void }"
   },
   "AudioQueueOptions": {
     "kind": "interface",
-    "signature": "{ addToFront?: boolean | undefined; crossOrigin?: \"anonymous\" | \"use-credentials\" | undefined; dedupeMs?: number | undefined; interrupt?: boolean | undefined; loop?: boolean | undefined; maxQueueSize?: number | undefined; metadata?: AudioMetadata | undefined; playbackRate?: number | undefined; startAt?: number | undefined; volume?: number | undefined }"
+    "signature": "{ addToFront?: boolean | undefined; crossOrigin?: \"anonymous\" | \"use-credentials\" | undefined; cues?: AudioCue[] | undefined; dedupeMs?: number | undefined; endAt?: number | undefined; interrupt?: boolean | undefined; loop?: boolean | undefined; maxQueueSize?: number | undefined; metadata?: AudioMetadata | undefined; playbackRate?: number | undefined; startAt?: number | undefined; volume?: number | undefined }"
   },
   "AudioResumeCallback": {
     "kind": "type",
@@ -50,6 +62,10 @@
   "AudioSource": {
     "kind": "type",
     "signature": "string | Blob"
+  },
+  "AudioSprite": {
+    "kind": "interface",
+    "signature": "{ names: readonly Name[]; play: (name: Name, channelNumber?: number | undefined, options?: AudioQueueOptions | undefined) => Promise<QueuedAudio> }"
   },
   "AudioStartCallback": {
     "kind": "type",
@@ -90,6 +106,10 @@
   "createAudioQueue": {
     "kind": "function",
     "signature": "(config?: Partial<QueueConfig>) => AudioQueue"
+  },
+  "defineSprite": {
+    "kind": "function",
+    "signature": "<Name extends string>(source: string, map: Readonly<Record<Name, SpriteSegment>>, queue?: AudioQueue | undefined) => AudioSprite<Name>"
   },
   "destroyAllChannels": {
     "kind": "function",
@@ -132,6 +152,10 @@
     "signature": "(channelNumber?: number | undefined) => number"
   },
   "getChannelVolume": {
+    "kind": "function",
+    "signature": "(channelNumber?: number | undefined) => number"
+  },
+  "getCrossfade": {
     "kind": "function",
     "signature": "(channelNumber?: number | undefined) => number"
   },
@@ -219,6 +243,10 @@
     "kind": "function",
     "signature": "(channelNumber?: number | undefined, callback?: AudioCompleteCallback | undefined) => void"
   },
+  "offAudioCue": {
+    "kind": "function",
+    "signature": "(channelNumber?: number | undefined, callback?: AudioCueCallback | undefined) => void"
+  },
   "offAudioError": {
     "kind": "function",
     "signature": "(channelNumber?: number | undefined, callback?: AudioErrorCallback | undefined) => void"
@@ -246,6 +274,10 @@
   "onAudioComplete": {
     "kind": "function",
     "signature": "(channelNumber: number, callback: AudioCompleteCallback) => Unsubscribe"
+  },
+  "onAudioCue": {
+    "kind": "function",
+    "signature": "(channelNumber: number, callback: AudioCueCallback) => Unsubscribe"
   },
   "onAudioError": {
     "kind": "function",
@@ -379,6 +411,10 @@
     "kind": "function",
     "signature": "(channelNumber: number, volume: number, transitionDuration?: number | undefined, easing?: EasingType | undefined) => Promise<void>"
   },
+  "setCrossfade": {
+    "kind": "function",
+    "signature": "(channelNumber: number, crossfadeMs: number) => void"
+  },
   "setGlobalVolume": {
     "kind": "function",
     "signature": "(volume: number) => Promise<void>"
@@ -402,6 +438,14 @@
   "shuffleQueue": {
     "kind": "function",
     "signature": "(channelNumber?: number | undefined, random?: (() => number) | undefined) => Promise<QueueManipulationResult>"
+  },
+  "SpriteMap": {
+    "kind": "type",
+    "signature": "Readonly<Record<string, SpriteSegment>>"
+  },
+  "SpriteSegment": {
+    "kind": "type",
+    "signature": "readonly [number, number] | { endMs: number; loop?: boolean; startMs: number }"
   },
   "stopAllAudio": {
     "kind": "function",

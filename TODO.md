@@ -9,16 +9,20 @@ Done in 3.0:
 - Loading state: `AudioInfo.isLoading`
 - Memory management: elements only for the playing and next items, released when they leave
 - Playlist helpers: `metadata`, `interrupt`, `dedupeMs`, Blob/File sources, `pauseWhenHidden`
+- Crossfade between items: `setCrossfade`
+- Audio sprites: `endAt`, `defineSprite`
+- Captions, lyrics, lip-sync: `cues` + `onAudioCue`
 
 Not planned as APIs (a timer does it; recipes are in the README):
 - Sleep timer
 - Scheduled playback at a predetermined time
 
 Potential New Package Features:
-- Crossfade between items (needs two elements playing at once per channel)
-- Gapless playback (Web Audio buffer scheduling)
-- Accessibility - audio descriptions, closed captions (cue events from item metadata)
-- Audio sprites (many short sounds in one file)
+- Sample-accurate gapless playback. Needs decoding whole files into Web Audio buffers (memory
+  heavy; specialist libraries like gapless-5 do this). `setCrossfade(channel, 50)` hides the
+  small gap between items for most music.
+- WebVTT caption files: parse a .vtt into `cues` (small helper)
+- Accessibility - audio descriptions (a second channel with ducking already covers most uses)
 
 Potential New Dev Features:
 - Debug and analytics mode

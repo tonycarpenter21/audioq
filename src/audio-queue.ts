@@ -23,6 +23,7 @@ import {
   EasingType,
   FadeType,
   type AudioCompleteCallback,
+  type AudioCueCallback,
   type AudioErrorCallback,
   type AudioInfo,
   type AudioPauseCallback,
@@ -713,7 +714,9 @@ export class AudioQueue extends QueueEngine {
     if (!['off', 'one', 'all'].includes(mode)) {
       throw new RangeError('Repeat mode must be "off", "one" or "all"');
     }
-    this.channel(channelNumber).repeat = mode;
+    const channel = this.channel(channelNumber);
+    channel.repeat = mode;
+    if (channel.head?.started === true) this.trackPosition(channel, channel.head);
   }
 
   /**
@@ -764,6 +767,31 @@ export class AudioQueue extends QueueEngine {
    */
   getChannelGap(channelNumber: number = 0): number {
     return this.existing(channelNumber)?.gapMs ?? 0;
+  }
+
+  /**
+   * Overlaps consecutive items: near the end of each item the next one starts and fades in while
+   * the current one fades out. Limited to half of an item's length; ignored for looping items and
+   * with repeat mode `'one'`.
+   * @param channelNumber - Channel
+   * @param crossfadeMs - Overlap in milliseconds (0 turns crossfading off)
+   */
+  setCrossfade(channelNumber: number, crossfadeMs: number): void {
+    if (!Number.isFinite(crossfadeMs) || crossfadeMs < 0) {
+      throw new RangeError('crossfadeMs must be 0 or a positive number of milliseconds');
+    }
+    const channel = this.channel(channelNumber);
+    channel.crossfadeMs = crossfadeMs;
+    if (channel.head?.started === true) this.trackPosition(channel, channel.head);
+  }
+
+  /**
+   * Reads a channel's crossfade length.
+   * @param channelNumber - Channel (defaults to 0)
+   * @returns Overlap in milliseconds (0 when off)
+   */
+  getCrossfade(channelNumber: number = 0): number {
+    return this.existing(channelNumber)?.crossfadeMs ?? 0;
   }
 
   /**
@@ -909,6 +937,26 @@ export class AudioQueue extends QueueEngine {
    */
   offAudioResume(channelNumber: number = 0, callback?: AudioResumeCallback): void {
     this.emitter.off('resume', channelNumber, callback);
+  }
+
+  /**
+   * Listens for cues (from the `cues` item option) being entered and left: show a caption when
+   * `active` is true, hide it when false. Point cues (no `endMs`) only fire when entered.
+   * @param channelNumber - Channel
+   * @param callback - Listener
+   * @returns Function that removes this listener
+   */
+  onAudioCue(channelNumber: number, callback: AudioCueCallback): Unsubscribe {
+    return this.subscribe('cue', channelNumber, callback);
+  }
+
+  /**
+   * Removes cue listeners.
+   * @param channelNumber - Channel (defaults to 0)
+   * @param callback - Remove only this listener; omit to remove all on the channel
+   */
+  offAudioCue(channelNumber: number = 0, callback?: AudioCueCallback): void {
+    this.emitter.off('cue', channelNumber, callback);
   }
 
   /**

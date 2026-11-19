@@ -230,7 +230,6 @@ describe('startAt and seeking', () => {
 
   test('an unseekable element does not break startAt', async () => {
     const queue = setup();
-    const original = Object.getOwnPropertyDescriptor(FakeAudio.prototype, 'currentTime');
     await queue.queueAudio('/a.mp3', 0, { startAt: 1000, metadata: undefined });
     const audio = audioAt(0);
     Object.defineProperty(audio, 'currentTime', {
@@ -241,7 +240,6 @@ describe('startAt and seeking', () => {
       }
     });
     expect(() => audio.fire('loadedmetadata')).not.toThrow();
-    expect(original).toBeUndefined();
   });
 
   test('seekTo clamps to the duration; seekBy moves relative to now', async () => {

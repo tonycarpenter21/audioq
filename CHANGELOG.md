@@ -38,6 +38,11 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   'all'`), `shuffleQueue`, `setChannelGap` (silence between items), `getHistory`/`clearHistory`
   (`historySize` config).
 - **`connectMediaSession`**: lock-screen and media-notification controls (tree-shakable).
+- **Audio sprites and segments**: `endAt` option (with `startAt`; segments can loop) and
+  `defineSprite(src, { name: [startMs, endMs] })` (tree-shakable).
+- **Cues**: `cues` option and `onAudioCue`/`offAudioCue` for captions, lyrics and lip-sync; ranged
+  cues report enter and exit, point cues fire once; timed precisely and follow seeks.
+- **Crossfade**: `setCrossfade(channel, ms)` overlaps consecutive items.
 - **OS pause/play detection**: when a phone call, unplugged headphones, the lock screen or Control
   Center pauses or plays audio, the channel state follows and pause/resume events fire.
 - **`pauseWhenHidden`** config, `isLoading` and `playbackRate` in `AudioInfo`, `id` and

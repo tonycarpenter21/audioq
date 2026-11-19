@@ -143,6 +143,12 @@ describe('top-level functions', () => {
     expect((await api.shuffleQueue(0)).success).toBe(true);
     expect(Array.isArray(api.getHistory(0))).toBe(true);
     api.clearHistory(0);
+    api.setCrossfade(0, 500);
+    expect(api.getCrossfade(0)).toBe(500);
+    api.setCrossfade(0, 0);
+    const offCue = api.onAudioCue(0, jest.fn());
+    offCue();
+    api.offAudioCue(0);
     await api.clearQueueAfterCurrent();
     await api.stopCurrentAudioInChannel();
     await api.stopAllAudioInChannel();

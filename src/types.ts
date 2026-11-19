@@ -86,6 +86,41 @@ export interface AudioMetadata {
   [key: string]: unknown;
 }
 
+/**
+ * A point or range in an item's timeline. Cues fire `onAudioCue` events as playback reaches them:
+ * use them for captions, karaoke lyrics, lip-sync, or triggering visuals at a moment in a track.
+ */
+export interface AudioCue {
+  /** Any data you want back in the event (a caption id, an animation name, ...). */
+  data?: unknown;
+  /** End of the cue in milliseconds. Without it the cue is a point that fires once. */
+  endMs?: number | undefined;
+  /** Start of the cue in milliseconds from the beginning of the file. */
+  startMs: number;
+  /** Caption or lyric text. */
+  text?: string | undefined;
+}
+
+/** Payload of the cue event. */
+export interface AudioCueInfo {
+  /** True when playback enters the cue, false when it leaves a ranged cue. */
+  active: boolean;
+  /** Channel the item plays on. */
+  channelNumber: number;
+  /** The cue, as you passed it. */
+  cue: AudioCue;
+  /** File name taken from the URL. */
+  fileName: string;
+  /** Unique id of the item. */
+  id: number;
+  /** Position of the cue in the item's (sorted) cue list. */
+  index: number;
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
+  /** Resolved source URL. */
+  src: string;
+}
+
 /** A finished item, as recorded in a channel's history. */
 export interface HistoryEntry {
   /** Channel the item played on. */
@@ -137,6 +172,13 @@ export interface AudioQueueOptions {
   crossOrigin?: 'anonymous' | 'use-credentials' | undefined;
   /** Repeat this item until it is stopped. */
   loop?: boolean | undefined;
+  /** Cues that fire `onAudioCue` events during playback (captions, lyrics, lip-sync). */
+  cues?: AudioCue[] | undefined;
+  /**
+   * Stop playback at this position (milliseconds) as if the file ended there. With `startAt` this
+   * plays one segment of a longer file (audio sprites); with `loop` the segment repeats.
+   */
+  endAt?: number | undefined;
   /** Queue limit for this call only. Overrides the channel and default limits. */
   maxQueueSize?: number | undefined;
   /** Item volume (0-1). Multiplied with the channel and global volume. Defaults to 1. */
@@ -384,6 +426,8 @@ export type AudioPauseCallback = (channelNumber: number, info: AudioInfo) => voi
 export type AudioResumeCallback = (channelNumber: number, info: AudioInfo) => void;
 /** Listener for errors. */
 export type AudioErrorCallback = (info: AudioErrorInfo) => void;
+/** Listener for cue enter/exit events. */
+export type AudioCueCallback = (info: AudioCueInfo) => void;
 /** What can be queued: a URL (relative, absolute, blob: or data:) or a Blob/File. */
 export type AudioSource = string | Blob;
 /** Removes the listener it was returned for. Safe to call more than once. */
