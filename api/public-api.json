@@ -5,7 +5,7 @@
   },
   "AudioCompleteInfo": {
     "kind": "interface",
-    "signature": "{ channelNumber: number; fileName: string; reason: import(\"/home/user/audioq/src/types\").CompletionReason; remainingInQueue: number; src: string }"
+    "signature": "{ channelNumber: number; fileName: string; reason: CompletionReason; remainingInQueue: number; src: string }"
   },
   "AudioErrorCallback": {
     "kind": "type",
@@ -13,7 +13,7 @@
   },
   "AudioErrorInfo": {
     "kind": "interface",
-    "signature": "{ channelNumber: number; error: Error; errorType: import(\"/home/user/audioq/src/types\").AudioErrorType; fileName: string; remainingInQueue: number; src: string; timestamp: number }"
+    "signature": "{ channelNumber: number; error: Error; errorType: AudioErrorType; fileName: string; remainingInQueue: number; src: string; timestamp: number }"
   },
   "AudioErrorType": {
     "kind": "enum",
@@ -29,7 +29,7 @@
   },
   "AudioQueue": {
     "kind": "class",
-    "signature": "{ advance: (channel: import(\"/home/user/audioq/src/channel\").Channel, reason: import(\"/home/user/audioq/src/types\").CompletionReason) => void; afterManipulation: (channel: import(\"/home/user/audioq/src/channel\").Channel, changed?: boolean) => import(\"/home/user/audioq/src/types\").QueueManipulationResult; anyPlaying: () => boolean; applyGain: (channel: import(\"/home/user/audioq/src/channel\").Channel) => void; armUnlock: () => void; cancelAllVolumeTransitions: () => void; cancelVolumeTransition: (channelNumber: number) => void; channel: (channelNumber: number) => import(\"/home/user/audioq/src/channel\").Channel; channels: Map<number, import(\"/home/user/audioq/src/channel\").Channel>; checkSlot: (channel: import(\"/home/user/audioq/src/channel\").Channel | undefined, slot: number, verb: string) => string | undefined; clearLoadTimer: (item: import(\"/home/user/audioq/src/channel\").Item) => void; clearQueueAfterCurrent: (channelNumber?: number) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>; clearVolumeDucking: () => void; config: import(\"/home/user/audioq/src/types\").QueueConfig; createItem: (url: string, channelNumber: number, options: import(\"/home/user/audioq/src/types\").AudioQueueOptions) => { handle: import(\"/home/user/audioq/src/types\").QueuedAudio; item: import(\"/home/user/audioq/src/channel\").Item; }; describeHead: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item) => import(\"/home/user/audioq/src/types\").AudioInfo; destroyAllChannels: () => Promise<void>; destroyChannel: (channelNumber?: number) => Promise<void>; disarmUnlock: () => void; duckTargetFor: (channelNumber: number) => number; ducking: import(\"/home/user/audioq/src/types\").VolumeConfig | undefined; emitComplete: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item, reason: import(\"/home/user/audioq/src/types\").CompletionReason) => void; emitError: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item, errorType: import(\"/home/user/audioq/src/types\").AudioErrorType, error: Error, remainingInQueue: number) => void; emitProgress: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item) => void; emitQueueChange: (channel: import(\"/home/user/audioq/src/channel\").Channel) => void; emitter: import(\"/home/user/audioq/src/emitter\").Emitter<QueueEvents>; emptySnapshot: (channelNumber: number) => import(\"/home/user/audioq/src/types\").QueueSnapshot; ensureElement: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item) => HTMLAudioElement; existing: (channelNumber: number) => import(\"/home/user/audioq/src/channel\").Channel | undefined; fade: (channel: import(\"/home/user/audioq/src/channel\").Channel, to: number, duration: number, easing: import(\"/home/user/audioq/src/types\").EasingType) => Promise<boolean>; fail: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item, type: import(\"/home/user/audioq/src/types\").AudioErrorType, error: Error) => void; finalize: (item: import(\"/home/user/audioq/src/channel\").Item, outcome: import(\"/home/user/audioq/src/types\").ItemOutcome) => void; getAllChannelsInfo: () => (import(\"/home/user/audioq/src/types\").AudioInfo | null)[]; getAllChannelsPauseState: () => boolean[]; getAllChannelsVolume: () => number[]; getChannelVolume: (channelNumber?: number) => number; getCurrentAudioInfo: (channelNumber?: number) => import(\"/home/user/audioq/src/types\").AudioInfo | null; getGlobalVolume: () => number; getQueueConfig: () => import(\"/home/user/audioq/src/types\").QueueConfig; getQueueItemInfo: (queueSlotNumber: number, channelNumber?: number) => import(\"/home/user/audioq/src/types\").QueueItem | null; getQueueLength: (channelNumber?: number) => number; getQueueSnapshot: (channelNumber?: number) => import(\"/home/user/audioq/src/types\").QueueSnapshot | null; getWebAudioSupport: () => import(\"/home/user/audioq/src/types\").WebAudioSupport; globalVolume: number; hasBlockedItems: () => boolean; isChannelPaused: (channelNumber?: number) => boolean; makeRoom: (channel: import(\"/home/user/audioq/src/channel\").Channel, override: number | undefined) => void; nextId: number; offAudioComplete: (channelNumber?: number, callback?: import(\"/home/user/audioq/src/types\").AudioCompleteCallback | undefined) => void; offAudioError: (channelNumber?: number, callback?: import(\"/home/user/audioq/src/types\").AudioErrorCallback | undefined) => void; offAudioPause: (channelNumber?: number, callback?: import(\"/home/user/audioq/src/types\").AudioPauseCallback | undefined) => void; offAudioProgress: (channelNumber?: number, callback?: import(\"/home/user/audioq/src/types\").ProgressCallback | undefined) => void; offAudioResume: (channelNumber?: number, callback?: import(\"/home/user/audioq/src/types\").AudioResumeCallback | undefined) => void; offAudioStart: (channelNumber?: number, callback?: import(\"/home/user/audioq/src/types\").AudioStartCallback | undefined) => void; offQueueChange: (channelNumber?: number, callback?: import(\"/home/user/audioq/src/types\").QueueChangeCallback | undefined) => void; onAudioComplete: (channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioCompleteCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe; onAudioError: (channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioErrorCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe; onAudioPause: (channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioPauseCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe; onAudioProgress: (channelNumber: number, callback: import(\"/home/user/audioq/src/types\").ProgressCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe; onAudioResume: (channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioResumeCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe; onAudioStart: (channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioStartCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe; onElementError: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item) => void; onPlayRejected: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item, error: unknown) => void; onPlaying: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item) => void; onQueueChange: (channelNumber: number, callback: import(\"/home/user/audioq/src/types\").QueueChangeCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe; onUserGesture: () => void; pauseAllChannels: () => Promise<void>; pauseAllWithFade: (fadeType?: import(\"/home/user/audioq/src/types\").FadeType, duration?: number | undefined) => Promise<void>; pauseChannel: (channelNumber?: number) => Promise<void>; pauseWithFade: (fadeType?: import(\"/home/user/audioq/src/types\").FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; perChannel: <T>(read: (channel: import(\"/home/user/audioq/src/channel\").Channel | undefined) => T) => T[]; play: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item) => Promise<void>; queueAudio: (audioUrl: string, channelNumber?: number, options?: import(\"/home/user/audioq/src/types\").AudioQueueOptions) => Promise<import(\"/home/user/audioq/src/types\").QueuedAudio>; queueAudioPriority: (audioUrl: string, channelNumber?: number, options?: import(\"/home/user/audioq/src/types\").AudioQueueOptions) => Promise<import(\"/home/user/audioq/src/types\").QueuedAudio>; refresh: (channel: import(\"/home/user/audioq/src/channel\").Channel) => void; removeQueuedItem: (queuedSlotNumber: number, channelNumber?: number) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>; reorderQueue: (currentQueuedSlotNumber: number, newQueuedSlotNumber: number, channelNumber?: number) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>; resetFade: (channel: import(\"/home/user/audioq/src/channel\").Channel) => void; resumeAllChannels: () => Promise<void>; resumeAllWithFade: (fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, duration?: number | undefined) => Promise<void>; resumeChannel: (channelNumber?: number) => Promise<void>; resumeFadeSettings: (channel: import(\"/home/user/audioq/src/channel\").Channel, fadeType: import(\"/home/user/audioq/src/types\").FadeType | undefined, duration: number | undefined) => { curve: import(\"/home/user/audioq/src/types\").EasingType; length: number; }; resumeWithFade: (fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, channelNumber?: number, duration?: number | undefined) => Promise<void>; routeThroughWebAudio: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item, element: HTMLAudioElement) => void; setAllChannelsVolume: (volume: number) => Promise<void>; setChannelQueueLimit: (channelNumber: number, maxSize?: number | undefined) => void; setChannelVolume: (channelNumber: number, volume: number, transitionDuration?: number | undefined, easing?: import(\"/home/user/audioq/src/types\").EasingType) => Promise<void>; setGlobalVolume: (volume: number) => Promise<void>; setQueueConfig: (config: Partial<import(\"/home/user/audioq/src/types\").QueueConfig>) => void; setVolumeDucking: (config: import(\"/home/user/audioq/src/types\").VolumeConfig) => void; snapshot: (channel: import(\"/home/user/audioq/src/channel\").Channel) => import(\"/home/user/audioq/src/types\").QueueSnapshot; startLoadTimer: (channel: import(\"/home/user/audioq/src/channel\").Channel, item: import(\"/home/user/audioq/src/channel\").Item) => void; stopAllAudio: () => Promise<void>; stopAllAudioInChannel: (channelNumber?: number) => Promise<void>; stopCurrentAudioInChannel: (channelNumber?: number) => Promise<void>; subscribe: <K extends keyof QueueEvents>(event: K, channelNumber: number, callback: (payload: QueueEvents[K]) => void) => import(\"/home/user/audioq/src/types\").Unsubscribe; swapQueueItems: (slotA: number, slotB: number, channelNumber?: number) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>; togglePauseAllChannels: () => Promise<void>; togglePauseAllWithFade: (fadeType?: import(\"/home/user/audioq/src/types\").FadeType, duration?: number | undefined) => Promise<void>; togglePauseChannel: (channelNumber?: number) => Promise<void>; togglePauseWithFade: (fadeType?: import(\"/home/user/audioq/src/types\").FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; transitionVolume: (channelNumber: number, targetVolume: number, duration?: number, easing?: import(\"/home/user/audioq/src/types\").EasingType) => Promise<void>; unlockArmed: boolean; unlockAudio: () => void; updateDucking: () => void; webAudio: import(\"/home/user/audioq/src/web-audio\").WebAudioEngine }"
+    "signature": "{ cancelAllVolumeTransitions: () => void; cancelVolumeTransition: (channelNumber: number) => void; clearQueueAfterCurrent: (channelNumber?: number) => Promise<QueueManipulationResult>; clearVolumeDucking: () => void; destroyAllChannels: () => Promise<void>; destroyChannel: (channelNumber?: number) => Promise<void>; getAllChannelsInfo: () => (AudioInfo | null)[]; getAllChannelsPauseState: () => boolean[]; getAllChannelsVolume: () => number[]; getChannelVolume: (channelNumber?: number) => number; getCurrentAudioInfo: (channelNumber?: number) => AudioInfo | null; getGlobalVolume: () => number; getQueueConfig: () => QueueConfig; getQueueItemInfo: (queueSlotNumber: number, channelNumber?: number) => QueueItem | null; getQueueLength: (channelNumber?: number) => number; getQueueSnapshot: (channelNumber?: number) => QueueSnapshot | null; getWebAudioSupport: () => WebAudioSupport; isChannelPaused: (channelNumber?: number) => boolean; offAudioComplete: (channelNumber?: number, callback?: AudioCompleteCallback | undefined) => void; offAudioError: (channelNumber?: number, callback?: AudioErrorCallback | undefined) => void; offAudioPause: (channelNumber?: number, callback?: AudioPauseCallback | undefined) => void; offAudioProgress: (channelNumber?: number, callback?: ProgressCallback | undefined) => void; offAudioResume: (channelNumber?: number, callback?: AudioResumeCallback | undefined) => void; offAudioStart: (channelNumber?: number, callback?: AudioStartCallback | undefined) => void; offQueueChange: (channelNumber?: number, callback?: QueueChangeCallback | undefined) => void; onAudioComplete: (channelNumber: number, callback: AudioCompleteCallback) => Unsubscribe; onAudioError: (channelNumber: number, callback: AudioErrorCallback) => Unsubscribe; onAudioPause: (channelNumber: number, callback: AudioPauseCallback) => Unsubscribe; onAudioProgress: (channelNumber: number, callback: ProgressCallback) => Unsubscribe; onAudioResume: (channelNumber: number, callback: AudioResumeCallback) => Unsubscribe; onAudioStart: (channelNumber: number, callback: AudioStartCallback) => Unsubscribe; onQueueChange: (channelNumber: number, callback: QueueChangeCallback) => Unsubscribe; pauseAllChannels: () => Promise<void>; pauseAllWithFade: (fadeType?: FadeType, duration?: number | undefined) => Promise<void>; pauseChannel: (channelNumber?: number) => Promise<void>; pauseWithFade: (fadeType?: FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; queueAudio: (audioUrl: string, channelNumber?: number, options?: AudioQueueOptions) => Promise<QueuedAudio>; queueAudioPriority: (audioUrl: string, channelNumber?: number, options?: AudioQueueOptions) => Promise<QueuedAudio>; removeQueuedItem: (queuedSlotNumber: number, channelNumber?: number) => Promise<QueueManipulationResult>; reorderQueue: (currentQueuedSlotNumber: number, newQueuedSlotNumber: number, channelNumber?: number) => Promise<QueueManipulationResult>; resumeAllChannels: () => Promise<void>; resumeAllWithFade: (fadeType?: FadeType | undefined, duration?: number | undefined) => Promise<void>; resumeChannel: (channelNumber?: number) => Promise<void>; resumeWithFade: (fadeType?: FadeType | undefined, channelNumber?: number, duration?: number | undefined) => Promise<void>; setAllChannelsVolume: (volume: number) => Promise<void>; setChannelQueueLimit: (channelNumber: number, maxSize?: number | undefined) => void; setChannelVolume: (channelNumber: number, volume: number, transitionDuration?: number | undefined, easing?: EasingType) => Promise<void>; setGlobalVolume: (volume: number) => Promise<void>; setQueueConfig: (config: Partial<QueueConfig>) => void; setVolumeDucking: (config: VolumeConfig) => void; stopAllAudio: () => Promise<void>; stopAllAudioInChannel: (channelNumber?: number) => Promise<void>; stopCurrentAudioInChannel: (channelNumber?: number) => Promise<void>; swapQueueItems: (slotA: number, slotB: number, channelNumber?: number) => Promise<QueueManipulationResult>; togglePauseAllChannels: () => Promise<void>; togglePauseAllWithFade: (fadeType?: FadeType, duration?: number | undefined) => Promise<void>; togglePauseChannel: (channelNumber?: number) => Promise<void>; togglePauseWithFade: (fadeType?: FadeType, channelNumber?: number, duration?: number | undefined) => Promise<void>; transitionVolume: (channelNumber: number, targetVolume: number, duration?: number, easing?: EasingType) => Promise<void>; unlockAudio: () => void }"
   },
   "AudioQueueOptions": {
     "kind": "interface",
@@ -57,7 +57,7 @@
   },
   "clearQueueAfterCurrent": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>"
+    "signature": "(channelNumber?: number | undefined) => Promise<QueueManipulationResult>"
   },
   "clearVolumeDucking": {
     "kind": "function",
@@ -69,7 +69,7 @@
   },
   "createAudioQueue": {
     "kind": "function",
-    "signature": "(config?: Partial<import(\"/home/user/audioq/src/types\").QueueConfig>) => import(\"/home/user/audioq/src/audio-queue\").AudioQueue"
+    "signature": "(config?: Partial<QueueConfig>) => AudioQueue"
   },
   "destroyAllChannels": {
     "kind": "function",
@@ -89,7 +89,7 @@
   },
   "FadeConfig": {
     "kind": "interface",
-    "signature": "{ duration: number; pauseCurve: import(\"/home/user/audioq/src/types\").EasingType; resumeCurve: import(\"/home/user/audioq/src/types\").EasingType }"
+    "signature": "{ duration: number; pauseCurve: EasingType; resumeCurve: EasingType }"
   },
   "FadeType": {
     "kind": "enum",
@@ -97,7 +97,7 @@
   },
   "getAllChannelsInfo": {
     "kind": "function",
-    "signature": "() => (import(\"/home/user/audioq/src/types\").AudioInfo | null)[]"
+    "signature": "() => (AudioInfo | null)[]"
   },
   "getAllChannelsPauseState": {
     "kind": "function",
@@ -113,15 +113,15 @@
   },
   "getCurrentAudioInfo": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined) => import(\"/home/user/audioq/src/types\").AudioInfo | null"
+    "signature": "(channelNumber?: number | undefined) => AudioInfo | null"
   },
   "getDefaultAudioQueue": {
     "kind": "function",
-    "signature": "() => import(\"/home/user/audioq/src/audio-queue\").AudioQueue"
+    "signature": "() => AudioQueue"
   },
   "getFadeConfig": {
     "kind": "function",
-    "signature": "(fadeType: import(\"/home/user/audioq/src/types\").FadeType) => import(\"/home/user/audioq/src/types\").FadeConfig"
+    "signature": "(fadeType: FadeType) => FadeConfig"
   },
   "getGlobalVolume": {
     "kind": "function",
@@ -129,11 +129,11 @@
   },
   "getQueueConfig": {
     "kind": "function",
-    "signature": "() => import(\"/home/user/audioq/src/types\").QueueConfig"
+    "signature": "() => QueueConfig"
   },
   "getQueueItemInfo": {
     "kind": "function",
-    "signature": "(queueSlotNumber: number, channelNumber?: number | undefined) => import(\"/home/user/audioq/src/types\").QueueItem | null"
+    "signature": "(queueSlotNumber: number, channelNumber?: number | undefined) => QueueItem | null"
   },
   "getQueueLength": {
     "kind": "function",
@@ -141,11 +141,11 @@
   },
   "getQueueSnapshot": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined) => import(\"/home/user/audioq/src/types\").QueueSnapshot | null"
+    "signature": "(channelNumber?: number | undefined) => QueueSnapshot | null"
   },
   "getWebAudioSupport": {
     "kind": "function",
-    "signature": "() => import(\"/home/user/audioq/src/types\").WebAudioSupport"
+    "signature": "() => WebAudioSupport"
   },
   "isChannelPaused": {
     "kind": "function",
@@ -173,59 +173,59 @@
   },
   "offAudioComplete": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined, callback?: import(\"/home/user/audioq/src/types\").AudioCompleteCallback | undefined) => void"
+    "signature": "(channelNumber?: number | undefined, callback?: AudioCompleteCallback | undefined) => void"
   },
   "offAudioError": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined, callback?: import(\"/home/user/audioq/src/types\").AudioErrorCallback | undefined) => void"
+    "signature": "(channelNumber?: number | undefined, callback?: AudioErrorCallback | undefined) => void"
   },
   "offAudioPause": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined, callback?: import(\"/home/user/audioq/src/types\").AudioPauseCallback | undefined) => void"
+    "signature": "(channelNumber?: number | undefined, callback?: AudioPauseCallback | undefined) => void"
   },
   "offAudioProgress": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined, callback?: import(\"/home/user/audioq/src/types\").ProgressCallback | undefined) => void"
+    "signature": "(channelNumber?: number | undefined, callback?: ProgressCallback | undefined) => void"
   },
   "offAudioResume": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined, callback?: import(\"/home/user/audioq/src/types\").AudioResumeCallback | undefined) => void"
+    "signature": "(channelNumber?: number | undefined, callback?: AudioResumeCallback | undefined) => void"
   },
   "offAudioStart": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined, callback?: import(\"/home/user/audioq/src/types\").AudioStartCallback | undefined) => void"
+    "signature": "(channelNumber?: number | undefined, callback?: AudioStartCallback | undefined) => void"
   },
   "offQueueChange": {
     "kind": "function",
-    "signature": "(channelNumber?: number | undefined, callback?: import(\"/home/user/audioq/src/types\").QueueChangeCallback | undefined) => void"
+    "signature": "(channelNumber?: number | undefined, callback?: QueueChangeCallback | undefined) => void"
   },
   "onAudioComplete": {
     "kind": "function",
-    "signature": "(channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioCompleteCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe"
+    "signature": "(channelNumber: number, callback: AudioCompleteCallback) => Unsubscribe"
   },
   "onAudioError": {
     "kind": "function",
-    "signature": "(channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioErrorCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe"
+    "signature": "(channelNumber: number, callback: AudioErrorCallback) => Unsubscribe"
   },
   "onAudioPause": {
     "kind": "function",
-    "signature": "(channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioPauseCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe"
+    "signature": "(channelNumber: number, callback: AudioPauseCallback) => Unsubscribe"
   },
   "onAudioProgress": {
     "kind": "function",
-    "signature": "(channelNumber: number, callback: import(\"/home/user/audioq/src/types\").ProgressCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe"
+    "signature": "(channelNumber: number, callback: ProgressCallback) => Unsubscribe"
   },
   "onAudioResume": {
     "kind": "function",
-    "signature": "(channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioResumeCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe"
+    "signature": "(channelNumber: number, callback: AudioResumeCallback) => Unsubscribe"
   },
   "onAudioStart": {
     "kind": "function",
-    "signature": "(channelNumber: number, callback: import(\"/home/user/audioq/src/types\").AudioStartCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe"
+    "signature": "(channelNumber: number, callback: AudioStartCallback) => Unsubscribe"
   },
   "onQueueChange": {
     "kind": "function",
-    "signature": "(channelNumber: number, callback: import(\"/home/user/audioq/src/types\").QueueChangeCallback) => import(\"/home/user/audioq/src/types\").Unsubscribe"
+    "signature": "(channelNumber: number, callback: QueueChangeCallback) => Unsubscribe"
   },
   "pauseAllChannels": {
     "kind": "function",
@@ -233,7 +233,7 @@
   },
   "pauseAllWithFade": {
     "kind": "function",
-    "signature": "(fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, duration?: number | undefined) => Promise<void>"
+    "signature": "(fadeType?: FadeType | undefined, duration?: number | undefined) => Promise<void>"
   },
   "pauseChannel": {
     "kind": "function",
@@ -241,7 +241,7 @@
   },
   "pauseWithFade": {
     "kind": "function",
-    "signature": "(fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, channelNumber?: number | undefined, duration?: number | undefined) => Promise<void>"
+    "signature": "(fadeType?: FadeType | undefined, channelNumber?: number | undefined, duration?: number | undefined) => Promise<void>"
   },
   "ProgressCallback": {
     "kind": "type",
@@ -249,11 +249,11 @@
   },
   "queueAudio": {
     "kind": "function",
-    "signature": "(audioUrl: string, channelNumber?: number | undefined, options?: import(\"/home/user/audioq/src/types\").AudioQueueOptions | undefined) => Promise<import(\"/home/user/audioq/src/types\").QueuedAudio>"
+    "signature": "(audioUrl: string, channelNumber?: number | undefined, options?: AudioQueueOptions | undefined) => Promise<QueuedAudio>"
   },
   "queueAudioPriority": {
     "kind": "function",
-    "signature": "(audioUrl: string, channelNumber?: number | undefined, options?: import(\"/home/user/audioq/src/types\").AudioQueueOptions | undefined) => Promise<import(\"/home/user/audioq/src/types\").QueuedAudio>"
+    "signature": "(audioUrl: string, channelNumber?: number | undefined, options?: AudioQueueOptions | undefined) => Promise<QueuedAudio>"
   },
   "QueueChangeCallback": {
     "kind": "type",
@@ -261,11 +261,11 @@
   },
   "QueueConfig": {
     "kind": "interface",
-    "signature": "{ defaultMaxQueueSize?: number | undefined; dropOldestWhenFull: boolean; loadTimeoutMs: number; logger: import(\"/home/user/audioq/src/types\").Logger | null; maxChannels: number; prefetchCount: number; showQueueWarnings: boolean; webAudio: import(\"/home/user/audioq/src/types\").WebAudioMode }"
+    "signature": "{ defaultMaxQueueSize?: number | undefined; dropOldestWhenFull: boolean; loadTimeoutMs: number; logger: Logger | null; maxChannels: number; prefetchCount: number; showQueueWarnings: boolean; webAudio: WebAudioMode }"
   },
   "QueuedAudio": {
     "kind": "interface",
-    "signature": "{ channelNumber: number; finished: Promise<import(\"/home/user/audioq/src/types\").ItemOutcome>; id: number; src: string; started: Promise<boolean> }"
+    "signature": "{ channelNumber: number; finished: Promise<ItemOutcome>; id: number; src: string; started: Promise<boolean> }"
   },
   "QueueItem": {
     "kind": "interface",
@@ -273,19 +273,19 @@
   },
   "QueueManipulationResult": {
     "kind": "interface",
-    "signature": "{ error?: string | undefined; success: boolean; updatedQueue?: import(\"/home/user/audioq/src/types\").QueueSnapshot | undefined }"
+    "signature": "{ error?: string | undefined; success: boolean; updatedQueue?: QueueSnapshot | undefined }"
   },
   "QueueSnapshot": {
     "kind": "interface",
-    "signature": "{ channelNumber: number; currentIndex: number; isPaused: boolean; items: import(\"/home/user/audioq/src/types\").QueueItem[]; totalItems: number; volume: number }"
+    "signature": "{ channelNumber: number; currentIndex: number; isPaused: boolean; items: QueueItem[]; totalItems: number; volume: number }"
   },
   "removeQueuedItem": {
     "kind": "function",
-    "signature": "(queuedSlotNumber: number, channelNumber?: number | undefined) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>"
+    "signature": "(queuedSlotNumber: number, channelNumber?: number | undefined) => Promise<QueueManipulationResult>"
   },
   "reorderQueue": {
     "kind": "function",
-    "signature": "(currentQueuedSlotNumber: number, newQueuedSlotNumber: number, channelNumber?: number | undefined) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>"
+    "signature": "(currentQueuedSlotNumber: number, newQueuedSlotNumber: number, channelNumber?: number | undefined) => Promise<QueueManipulationResult>"
   },
   "resumeAllChannels": {
     "kind": "function",
@@ -293,7 +293,7 @@
   },
   "resumeAllWithFade": {
     "kind": "function",
-    "signature": "(fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, duration?: number | undefined) => Promise<void>"
+    "signature": "(fadeType?: FadeType | undefined, duration?: number | undefined) => Promise<void>"
   },
   "resumeChannel": {
     "kind": "function",
@@ -301,7 +301,7 @@
   },
   "resumeWithFade": {
     "kind": "function",
-    "signature": "(fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, channelNumber?: number | undefined, duration?: number | undefined) => Promise<void>"
+    "signature": "(fadeType?: FadeType | undefined, channelNumber?: number | undefined, duration?: number | undefined) => Promise<void>"
   },
   "setAllChannelsVolume": {
     "kind": "function",
@@ -313,7 +313,7 @@
   },
   "setChannelVolume": {
     "kind": "function",
-    "signature": "(channelNumber: number, volume: number, transitionDuration?: number | undefined, easing?: import(\"/home/user/audioq/src/types\").EasingType | undefined) => Promise<void>"
+    "signature": "(channelNumber: number, volume: number, transitionDuration?: number | undefined, easing?: EasingType | undefined) => Promise<void>"
   },
   "setGlobalVolume": {
     "kind": "function",
@@ -321,11 +321,11 @@
   },
   "setQueueConfig": {
     "kind": "function",
-    "signature": "(config: Partial<import(\"/home/user/audioq/src/types\").QueueConfig>) => void"
+    "signature": "(config: Partial<QueueConfig>) => void"
   },
   "setVolumeDucking": {
     "kind": "function",
-    "signature": "(config: import(\"/home/user/audioq/src/types\").VolumeConfig) => void"
+    "signature": "(config: VolumeConfig) => void"
   },
   "stopAllAudio": {
     "kind": "function",
@@ -341,7 +341,7 @@
   },
   "swapQueueItems": {
     "kind": "function",
-    "signature": "(slotA: number, slotB: number, channelNumber?: number | undefined) => Promise<import(\"/home/user/audioq/src/types\").QueueManipulationResult>"
+    "signature": "(slotA: number, slotB: number, channelNumber?: number | undefined) => Promise<QueueManipulationResult>"
   },
   "togglePauseAllChannels": {
     "kind": "function",
@@ -349,7 +349,7 @@
   },
   "togglePauseAllWithFade": {
     "kind": "function",
-    "signature": "(fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, duration?: number | undefined) => Promise<void>"
+    "signature": "(fadeType?: FadeType | undefined, duration?: number | undefined) => Promise<void>"
   },
   "togglePauseChannel": {
     "kind": "function",
@@ -357,11 +357,11 @@
   },
   "togglePauseWithFade": {
     "kind": "function",
-    "signature": "(fadeType?: import(\"/home/user/audioq/src/types\").FadeType | undefined, channelNumber?: number | undefined, duration?: number | undefined) => Promise<void>"
+    "signature": "(fadeType?: FadeType | undefined, channelNumber?: number | undefined, duration?: number | undefined) => Promise<void>"
   },
   "transitionVolume": {
     "kind": "function",
-    "signature": "(channelNumber: number, targetVolume: number, duration?: number | undefined, easing?: import(\"/home/user/audioq/src/types\").EasingType | undefined) => Promise<void>"
+    "signature": "(channelNumber: number, targetVolume: number, duration?: number | undefined, easing?: EasingType | undefined) => Promise<void>"
   },
   "unlockAudio": {
     "kind": "function",
@@ -373,7 +373,7 @@
   },
   "VolumeConfig": {
     "kind": "interface",
-    "signature": "{ duckTransitionDuration?: number | undefined; duckingVolume: number; priorityChannel: number; priorityVolume: number; restoreTransitionDuration?: number | undefined; transitionEasing?: import(\"/home/user/audioq/src/types\").EasingType | undefined }"
+    "signature": "{ duckTransitionDuration?: number | undefined; duckingVolume: number; priorityChannel: number; priorityVolume: number; restoreTransitionDuration?: number | undefined; transitionEasing?: EasingType | undefined }"
   },
   "WebAudioMode": {
     "kind": "type",

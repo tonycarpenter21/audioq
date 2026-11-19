@@ -281,6 +281,9 @@ export const packageGates = [
       const expected = readJson(API_SNAPSHOT_PATH);
       const actual = readPublicApi();
       const problems = [];
+      if (/"(\/|[A-Za-z]:\\)/.test(JSON.stringify(actual))) {
+        problems.push('The API description contains absolute file paths (machine-specific)');
+      }
       for (const name of Object.keys(expected)) {
         if (!(name in actual)) problems.push(`Removed export: ${name}`);
         else if (JSON.stringify(expected[name]) !== JSON.stringify(actual[name])) {

@@ -21,7 +21,8 @@ const compilerOptions = {
 const describeSymbol = (checker, symbol) => {
   const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
   const declaration = target.declarations?.[0];
-  const flags = ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseFullyQualifiedType;
+  // Plain type names: fully qualified names embed absolute file paths, which differ per machine.
+  const flags = ts.TypeFormatFlags.NoTruncation;
   if (!declaration) return { kind: 'unknown', signature: '' };
   if (ts.isInterfaceDeclaration(declaration) || ts.isTypeAliasDeclaration(declaration)) {
     const type = checker.getDeclaredTypeOfSymbol(target);
@@ -46,8 +47,16 @@ const describeSymbol = (checker, symbol) => {
   }
   if (ts.isClassDeclaration(declaration)) {
     const instance = checker.getDeclaredTypeOfSymbol(target);
+    const isPublic = (property) =>
+      !(property.declarations ?? []).some(
+        (decl) =>
+          (ts.getCombinedModifierFlags(decl) &
+            (ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) !==
+          0
+      );
     const members = checker
       .getPropertiesOfType(instance)
+      .filter(isPublic)
       .map((property) => {
         const type = checker.getTypeOfSymbolAtLocation(property, declaration);
         return `${property.name}: ${checker.typeToString(type, undefined, flags)}`;

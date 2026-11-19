@@ -96,6 +96,14 @@ for (const gate of gates) {
   results.push(entry);
   const seconds = (entry.durationMs / 1000).toFixed(1).padStart(5);
   console.log(`${ICON[entry.status]} ${gate.id.padEnd(26)} ${seconds}s  ${entry.summary}`);
+  if (entry.status === 'fail') {
+    // Print the problems too, so CI logs are useful without downloading the report.
+    const shown = entry.problems.slice(0, 15);
+    for (const problem of shown) console.log(`      ${problem.split('\n').join('\n      ')}`);
+    if (entry.problems.length > shown.length) {
+      console.log(`      ... ${entry.problems.length - shown.length} more in the report`);
+    }
+  }
 }
 
 const count = (status) => results.filter((result) => result.status === status).length;
