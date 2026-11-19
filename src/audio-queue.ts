@@ -11,7 +11,13 @@
 
 import { QueueEngine } from './engine.js';
 import type { Item } from './channel.js';
-import { getFadeConfig, mergeQueueConfig, validateVolumeConfig } from './config.js';
+import {
+  clampPlaybackRate,
+  getFadeConfig,
+  mergeQueueConfig,
+  validateVolumeConfig
+} from './config.js';
+import { resolveUrl } from './media.js';
 import { startTween } from './tween.js';
 import {
   EasingType,
@@ -22,7 +28,9 @@ import {
   type AudioPauseCallback,
   type AudioQueueOptions,
   type AudioResumeCallback,
+  type AudioSource,
   type AudioStartCallback,
+  type HistoryEntry,
   type ProgressCallback,
   type QueueChangeCallback,
   type QueueConfig,
@@ -30,12 +38,29 @@ import {
   type QueueManipulationResult,
   type QueueSnapshot,
   type QueuedAudio,
+  type RepeatMode,
   type Unsubscribe,
   type VolumeConfig,
   type WebAudioSupport
 } from './types.js';
-import { assertChannelNumber, clampUnit } from './utils.js';
+import { assertChannelNumber, clampUnit, secondsToMs } from './utils.js';
 import { describeWebAudioSupport } from './web-audio.js';
+
+/**
+ * Validates a source and checks that audio can be played here.
+ * @param source - URL or Blob passed to queueAudio
+ * @returns The resolved URL for string sources, or undefined for a Blob
+ */
+const checkSource = (source: AudioSource): string | undefined => {
+  const isBlob = typeof Blob !== 'undefined' && source instanceof Blob;
+  if (!isBlob && (typeof source !== 'string' || source.trim().length === 0)) {
+    throw new TypeError('source must be a non-empty URL string or a Blob');
+  }
+  if (typeof Audio === 'undefined') {
+    throw new Error('audioq needs a browser environment (HTMLAudioElement is not available)');
+  }
+  return isBlob ? undefined : resolveUrl((source as string).trim());
+};
 
 /**
  * Manages audio channels, each with its own queue, volume, pause state and events.
@@ -62,6 +87,7 @@ export class AudioQueue extends QueueEngine {
    */
   setQueueConfig(config: Partial<QueueConfig>): void {
     this.config = mergeQueueConfig(this.config, config);
+    this.syncVisibilityListener();
   }
 
   /**
@@ -95,33 +121,34 @@ export class AudioQueue extends QueueEngine {
   // ---------------------------------------------------------------- queueing
 
   /**
-   * Adds an audio file to a channel. If the channel is idle it starts playing right away.
+   * Adds audio to a channel. If the channel is idle it starts playing right away.
    * Resolves as soon as the item is queued; use the returned handle to await start or finish.
-   * @param audioUrl - URL of the file (relative, absolute, blob: or data:)
+   * @param source - URL of the file (relative, absolute, blob: or data:), or a Blob/File such as
+   * a fetched or generated (text-to-speech) clip; Blob URLs are created and revoked for you
    * @param channelNumber - Channel to queue on (defaults to 0)
    * @param options - Per-item options
    * @returns Handle with `started` and `finished` promises
    * @example
    * ```typescript
    * const item = await queueAudio('/sfx/click.mp3');
-   * await item.finished; // 'ended' | 'stopped' | 'error' | 'removed'
+   * await item.finished; // 'ended' | 'stopped' | 'error' | 'removed' | 'skipped'
    * await queueAudio('/music/theme.mp3', 1, { loop: true, volume: 0.5 });
    * ```
    */
   async queueAudio(
-    audioUrl: string,
+    source: AudioSource,
     channelNumber: number = 0,
     options: AudioQueueOptions = {}
   ): Promise<QueuedAudio> {
-    if (typeof audioUrl !== 'string' || audioUrl.trim().length === 0) {
-      throw new TypeError('audioUrl must be a non-empty string');
-    }
-    if (typeof Audio === 'undefined') {
-      throw new Error('audioq needs a browser environment (HTMLAudioElement is not available)');
-    }
+    const url = checkSource(source);
     const channel = this.channel(channelNumber);
+    const dedupeMs = options.dedupeMs ?? 0;
+    if (url !== undefined && dedupeMs > 0 && channel.isDuplicate(url, dedupeMs, Date.now())) {
+      return this.skippedHandle(channelNumber, url, options);
+    }
+    if (options.interrupt === true) this.clearChannel(channel);
     this.makeRoom(channel, options.maxQueueSize);
-    const { handle, item } = this.createItem(audioUrl.trim(), channelNumber, options);
+    const { handle, item } = this.createItem(url ?? source, channelNumber, options);
     if (options.addToFront === true && channel.items.length > 0) {
       channel.items.splice(1, 0, item);
     } else {
@@ -133,18 +160,18 @@ export class AudioQueue extends QueueEngine {
   }
 
   /**
-   * Adds an audio file right after the currently playing item.
-   * @param audioUrl - URL of the file
+   * Adds audio right after the currently playing item.
+   * @param source - URL of the file, or a Blob/File
    * @param channelNumber - Channel to queue on (defaults to 0)
    * @param options - Per-item options
    * @returns Handle with `started` and `finished` promises
    */
   async queueAudioPriority(
-    audioUrl: string,
+    source: AudioSource,
     channelNumber: number = 0,
     options: AudioQueueOptions = {}
   ): Promise<QueuedAudio> {
-    return this.queueAudio(audioUrl, channelNumber, { ...options, addToFront: true });
+    return this.queueAudio(source, channelNumber, { ...options, addToFront: true });
   }
 
   // ---------------------------------------------------------------- stopping
@@ -164,16 +191,7 @@ export class AudioQueue extends QueueEngine {
    */
   async stopAllAudioInChannel(channelNumber: number = 0): Promise<void> {
     const channel = this.existing(channelNumber);
-    if (!channel) return;
-    const removed = channel.items.splice(0, channel.items.length);
-    channel.paused = false;
-    this.resetFade(channel);
-    const [head, ...rest] = removed;
-    if (head) this.emitComplete(channel, head, 'stopped');
-    if (head) this.finalize(head, 'stopped');
-    rest.forEach((item) => this.finalize(item, 'removed'));
-    if (removed.length > 0) this.emitQueueChange(channel);
-    this.updateDucking();
+    if (channel) this.clearChannel(channel);
   }
 
   /** Stops and clears every channel. */
@@ -314,14 +332,7 @@ export class AudioQueue extends QueueEngine {
    */
   async pauseChannel(channelNumber: number = 0): Promise<void> {
     const channel = this.existing(channelNumber);
-    const head = channel?.head;
-    if (!channel || !head || channel.paused) return;
-    channel.fadeTween?.cancel();
-    channel.paused = true;
-    head.playRequested = false;
-    this.clearLoadTimer(head);
-    head.element?.pause();
-    this.emitter.emit('pause', channel.channelNumber, this.describeHead(channel, head));
+    if (channel) this.pauseNow(channel);
   }
 
   /**
@@ -330,13 +341,7 @@ export class AudioQueue extends QueueEngine {
    */
   async resumeChannel(channelNumber: number = 0): Promise<void> {
     const channel = this.existing(channelNumber);
-    const head = channel?.head;
-    if (!channel || !head || !channel.paused) return;
-    this.resetFade(channel);
-    channel.paused = false;
-    const attempt = this.play(channel, head);
-    this.emitter.emit('resume', channel.channelNumber, this.describeHead(channel, head));
-    await attempt;
+    if (channel) await this.resumeNow(channel);
   }
 
   /**
@@ -407,7 +412,8 @@ export class AudioQueue extends QueueEngine {
     if (channel.paused) {
       channel.fadeFactor = 0;
       channel.paused = false;
-      void this.play(channel, head);
+      channel.hiddenPause = false;
+      if (channel.gapTimer === undefined) void this.play(channel, head);
       this.emitter.emit('resume', channel.channelNumber, this.describeHead(channel, head));
     }
     await this.fade(channel, 1, length, curve);
@@ -644,6 +650,136 @@ export class AudioQueue extends QueueEngine {
    */
   unlockAudio(): void {
     this.unlockBlocked();
+  }
+
+  // ---------------------------------------------------------------- playback controls
+
+  /**
+   * Jumps to a position in the current item.
+   * @param channelNumber - Channel
+   * @param positionMs - Position in milliseconds (clamped to the item's length)
+   * @returns True when there was an item to seek
+   */
+  seekTo(channelNumber: number, positionMs: number): boolean {
+    const element = this.existing(channelNumber)?.head?.element;
+    if (!element || !Number.isFinite(positionMs)) return false;
+    const durationMs = secondsToMs(element.duration);
+    const target = Math.max(0, durationMs > 0 ? Math.min(positionMs, durationMs) : positionMs);
+    element.currentTime = target / 1000;
+    return true;
+  }
+
+  /**
+   * Moves forward (positive) or back (negative) in the current item, like a 15-second skip.
+   * @param channelNumber - Channel
+   * @param offsetMs - Milliseconds to move
+   * @returns True when there was an item to seek
+   */
+  seekBy(channelNumber: number, offsetMs: number): boolean {
+    const element = this.existing(channelNumber)?.head?.element;
+    if (!element || !Number.isFinite(offsetMs)) return false;
+    return this.seekTo(channelNumber, secondsToMs(element.currentTime) + offsetMs);
+  }
+
+  /**
+   * Sets the playback speed of a channel (0.25-4, pitch preserved). Multiplies each item's own
+   * `playbackRate`.
+   * @param channelNumber - Channel
+   * @param rate - Speed, for example 1.5
+   */
+  setPlaybackRate(channelNumber: number, rate: number): void {
+    const channel = this.channel(channelNumber);
+    channel.playbackRate = clampPlaybackRate(rate);
+    this.applyRate(channel);
+  }
+
+  /**
+   * Reads the playback speed of a channel.
+   * @param channelNumber - Channel (defaults to 0)
+   * @returns The channel speed (1 for unused channels)
+   */
+  getPlaybackRate(channelNumber: number = 0): number {
+    return this.existing(channelNumber)?.playbackRate ?? 1;
+  }
+
+  /**
+   * Chooses what happens when an item ends: `'off'` moves on, `'one'` replays the item,
+   * `'all'` moves the finished item to the end of the queue so the queue repeats.
+   * @param channelNumber - Channel
+   * @param mode - Repeat mode
+   */
+  setRepeatMode(channelNumber: number, mode: RepeatMode): void {
+    if (!['off', 'one', 'all'].includes(mode)) {
+      throw new RangeError('Repeat mode must be "off", "one" or "all"');
+    }
+    this.channel(channelNumber).repeat = mode;
+  }
+
+  /**
+   * Reads a channel's repeat mode.
+   * @param channelNumber - Channel (defaults to 0)
+   * @returns The repeat mode (`'off'` for unused channels)
+   */
+  getRepeatMode(channelNumber: number = 0): RepeatMode {
+    return this.existing(channelNumber)?.repeat ?? 'off';
+  }
+
+  /**
+   * Shuffles the waiting items of a channel. The current item keeps playing.
+   * @param channelNumber - Channel (defaults to 0)
+   * @param random - Random number source returning [0, 1), for reproducible shuffles
+   * @returns Whether it worked, and the updated queue
+   */
+  async shuffleQueue(
+    channelNumber: number = 0,
+    random: () => number = Math.random
+  ): Promise<QueueManipulationResult> {
+    const channel = this.existing(channelNumber);
+    if (!channel) return { success: true, updatedQueue: this.emptySnapshot(channelNumber) };
+    const items = channel.items;
+    for (let i = items.length - 1; i > 1; i--) {
+      const j = 1 + Math.floor(random() * i);
+      [items[i], items[j]] = [items[j] as Item, items[i] as Item];
+    }
+    return this.afterManipulation(channel, items.length > 2);
+  }
+
+  /**
+   * Adds a pause between items on a channel.
+   * @param channelNumber - Channel
+   * @param gapMs - Silence between items in milliseconds (0 for none)
+   */
+  setChannelGap(channelNumber: number, gapMs: number): void {
+    if (!Number.isFinite(gapMs) || gapMs < 0) {
+      throw new RangeError('gapMs must be 0 or a positive number of milliseconds');
+    }
+    this.channel(channelNumber).gapMs = gapMs;
+  }
+
+  /**
+   * Reads the pause between items on a channel.
+   * @param channelNumber - Channel (defaults to 0)
+   * @returns Gap in milliseconds
+   */
+  getChannelGap(channelNumber: number = 0): number {
+    return this.existing(channelNumber)?.gapMs ?? 0;
+  }
+
+  /**
+   * Lists the items that finished on a channel, oldest first (up to `historySize`).
+   * @param channelNumber - Channel (defaults to 0)
+   * @returns A copy of the history
+   */
+  getHistory(channelNumber: number = 0): HistoryEntry[] {
+    return [...(this.existing(channelNumber)?.history ?? [])];
+  }
+
+  /**
+   * Forgets a channel's history.
+   * @param channelNumber - Channel (defaults to 0)
+   */
+  clearHistory(channelNumber: number = 0): void {
+    this.existing(channelNumber)?.history.splice(0);
   }
 
   // ---------------------------------------------------------------- events

@@ -12,9 +12,11 @@ import type {
   AudioPauseCallback,
   AudioQueueOptions,
   AudioResumeCallback,
+  AudioSource,
   AudioStartCallback,
   EasingType,
   FadeType,
+  HistoryEntry,
   ProgressCallback,
   QueueChangeCallback,
   QueueConfig,
@@ -22,6 +24,7 @@ import type {
   QueueManipulationResult,
   QueueSnapshot,
   QueuedAudio,
+  RepeatMode,
   Unsubscribe,
   VolumeConfig,
   WebAudioSupport
@@ -71,38 +74,39 @@ export const getWebAudioSupport = (): WebAudioSupport =>
   getDefaultAudioQueue().getWebAudioSupport();
 
 /**
- * Adds an audio file to a channel. If the channel is idle it starts playing right away.
+ * Adds audio to a channel. If the channel is idle it starts playing right away.
  * Resolves as soon as the item is queued; use the returned handle to await start or finish.
- * @param audioUrl - URL of the file (relative, absolute, blob: or data:)
+ * @param source - URL of the file (relative, absolute, blob: or data:), or a Blob/File such as
+ * a fetched or generated (text-to-speech) clip; Blob URLs are created and revoked for you
  * @param channelNumber - Channel to queue on (defaults to 0)
  * @param options - Per-item options
  * @returns Handle with `started` and `finished` promises
  * @example
  * ```typescript
  * const item = await queueAudio('/sfx/click.mp3');
- * await item.finished; // 'ended' | 'stopped' | 'error' | 'removed'
+ * await item.finished; // 'ended' | 'stopped' | 'error' | 'removed' | 'skipped'
  * await queueAudio('/music/theme.mp3', 1, { loop: true, volume: 0.5 });
  * ```
  */
 export const queueAudio = (
-  audioUrl: string,
+  source: AudioSource,
   channelNumber?: number,
   options?: AudioQueueOptions
-): Promise<QueuedAudio> => getDefaultAudioQueue().queueAudio(audioUrl, channelNumber, options);
+): Promise<QueuedAudio> => getDefaultAudioQueue().queueAudio(source, channelNumber, options);
 
 /**
- * Adds an audio file right after the currently playing item.
- * @param audioUrl - URL of the file
+ * Adds audio right after the currently playing item.
+ * @param source - URL of the file, or a Blob/File
  * @param channelNumber - Channel to queue on (defaults to 0)
  * @param options - Per-item options
  * @returns Handle with `started` and `finished` promises
  */
 export const queueAudioPriority = (
-  audioUrl: string,
+  source: AudioSource,
   channelNumber?: number,
   options?: AudioQueueOptions
 ): Promise<QueuedAudio> =>
-  getDefaultAudioQueue().queueAudioPriority(audioUrl, channelNumber, options);
+  getDefaultAudioQueue().queueAudioPriority(source, channelNumber, options);
 
 /**
  * Stops the current item and starts the next one.
@@ -421,6 +425,100 @@ export const getQueueSnapshot = (channelNumber?: number): QueueSnapshot | null =
  * audioq also does this automatically on the next pointer or key press.
  */
 export const unlockAudio = (): void => getDefaultAudioQueue().unlockAudio();
+
+/**
+ * Jumps to a position in the current item.
+ * @param channelNumber - Channel
+ * @param positionMs - Position in milliseconds (clamped to the item's length)
+ * @returns True when there was an item to seek
+ */
+export const seekTo = (channelNumber: number, positionMs: number): boolean =>
+  getDefaultAudioQueue().seekTo(channelNumber, positionMs);
+
+/**
+ * Moves forward (positive) or back (negative) in the current item, like a 15-second skip.
+ * @param channelNumber - Channel
+ * @param offsetMs - Milliseconds to move
+ * @returns True when there was an item to seek
+ */
+export const seekBy = (channelNumber: number, offsetMs: number): boolean =>
+  getDefaultAudioQueue().seekBy(channelNumber, offsetMs);
+
+/**
+ * Sets the playback speed of a channel (0.25-4, pitch preserved). Multiplies each item's own
+ * `playbackRate`.
+ * @param channelNumber - Channel
+ * @param rate - Speed, for example 1.5
+ */
+export const setPlaybackRate = (channelNumber: number, rate: number): void =>
+  getDefaultAudioQueue().setPlaybackRate(channelNumber, rate);
+
+/**
+ * Reads the playback speed of a channel.
+ * @param channelNumber - Channel (defaults to 0)
+ * @returns The channel speed (1 for unused channels)
+ */
+export const getPlaybackRate = (channelNumber?: number): number =>
+  getDefaultAudioQueue().getPlaybackRate(channelNumber);
+
+/**
+ * Chooses what happens when an item ends: `'off'` moves on, `'one'` replays the item,
+ * `'all'` moves the finished item to the end of the queue so the queue repeats.
+ * @param channelNumber - Channel
+ * @param mode - Repeat mode
+ */
+export const setRepeatMode = (channelNumber: number, mode: RepeatMode): void =>
+  getDefaultAudioQueue().setRepeatMode(channelNumber, mode);
+
+/**
+ * Reads a channel's repeat mode.
+ * @param channelNumber - Channel (defaults to 0)
+ * @returns The repeat mode (`'off'` for unused channels)
+ */
+export const getRepeatMode = (channelNumber?: number): RepeatMode =>
+  getDefaultAudioQueue().getRepeatMode(channelNumber);
+
+/**
+ * Shuffles the waiting items of a channel. The current item keeps playing.
+ * @param channelNumber - Channel (defaults to 0)
+ * @param random - Random number source returning [0, 1), for reproducible shuffles
+ * @returns Whether it worked, and the updated queue
+ */
+export const shuffleQueue = (
+  channelNumber?: number,
+  random?: () => number
+): Promise<QueueManipulationResult> => getDefaultAudioQueue().shuffleQueue(channelNumber, random);
+
+/**
+ * Adds a pause between items on a channel.
+ * @param channelNumber - Channel
+ * @param gapMs - Silence between items in milliseconds (0 for none)
+ */
+export const setChannelGap = (channelNumber: number, gapMs: number): void =>
+  getDefaultAudioQueue().setChannelGap(channelNumber, gapMs);
+
+/**
+ * Reads the pause between items on a channel.
+ * @param channelNumber - Channel (defaults to 0)
+ * @returns Gap in milliseconds
+ */
+export const getChannelGap = (channelNumber?: number): number =>
+  getDefaultAudioQueue().getChannelGap(channelNumber);
+
+/**
+ * Lists the items that finished on a channel, oldest first (up to `historySize`).
+ * @param channelNumber - Channel (defaults to 0)
+ * @returns A copy of the history
+ */
+export const getHistory = (channelNumber?: number): HistoryEntry[] =>
+  getDefaultAudioQueue().getHistory(channelNumber);
+
+/**
+ * Forgets a channel's history.
+ * @param channelNumber - Channel (defaults to 0)
+ */
+export const clearHistory = (channelNumber?: number): void =>
+  getDefaultAudioQueue().clearHistory(channelNumber);
 
 /**
  * Listens for progress updates of a channel's current item.

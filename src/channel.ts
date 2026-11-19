@@ -6,8 +6,15 @@
 import type { Disposer } from './media.js';
 import type { Tween } from './tween.js';
 import type { GainRoute } from './web-audio.js';
-import type { FadeType, ItemOutcome, QueueItem } from './types.js';
-import { extractFileName, secondsToMs } from './utils.js';
+import type {
+  AudioMetadata,
+  FadeType,
+  HistoryEntry,
+  ItemOutcome,
+  QueueItem,
+  RepeatMode
+} from './types.js';
+import { secondsToMs } from './utils.js';
 
 /** One queued audio file. */
 export interface Item {
@@ -21,12 +28,20 @@ export interface Item {
   disposers: Disposer[];
   /** The element; created when the item enters the prefetch window. */
   element: HTMLAudioElement | undefined;
+  /** Readable name: the File name for File sources, otherwise taken from the URL. */
+  readonly fileName: string;
   /** Unique id. */
   readonly id: number;
   /** Timer that skips the item if it does not start in time. */
   loadTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether the item loops. */
   readonly loop: boolean;
+  /** Metadata given when the item was queued. */
+  readonly metadata: AudioMetadata | undefined;
+  /** Object URL created for a Blob source; revoked when the item is released. */
+  objectUrl: string | undefined;
+  /** Item playback speed (multiplied with the channel rate). */
+  readonly playbackRate: number;
   /** Whether play() has been requested since the item became current or was last paused. */
   playRequested: boolean;
   /** Settles the `finished` promise. */
@@ -39,6 +54,8 @@ export interface Item {
   settled: boolean;
   /** Resolved URL. */
   readonly src: string;
+  /** Position (ms) to start from when the item first plays. */
+  startAt: number;
   /** Whether the `playing` event has fired at least once. */
   started: boolean;
   /** Item volume multiplier (0-1). */
@@ -67,12 +84,26 @@ export class Channel {
   fadeTween: Tween | undefined;
   /** Items in play order; index 0 is current. */
   readonly items: Item[] = [];
+  /** Pause between items in milliseconds. */
+  gapMs: number = 0;
+  /** Timer delaying the next item by `gapMs`. */
+  gapTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Whether the channel was paused because the page became hidden. */
+  hiddenPause: boolean = false;
+  /** Finished items, oldest first. */
+  readonly history: HistoryEntry[] = [];
   /** Fade used by the last `pauseWithFade`. */
   lastFade: RememberedFade | undefined;
   /** Channel-specific queue limit. */
   maxQueueSize: number | undefined;
   /** Whether the channel is paused. */
   paused: boolean = false;
+  /** Channel playback speed (multiplied with each item's rate). */
+  playbackRate: number = 1;
+  /** Sources recently queued, with the time until which repeats are ignored (`dedupeMs`). */
+  readonly recentSources: Map<string, number> = new Map();
+  /** What happens when an item ends. */
+  repeat: RepeatMode = 'off';
   /** Channel volume (0-1). */
   volume: number = 1;
   /** Running channel volume transition. */
@@ -102,6 +133,47 @@ export class Channel {
     return Math.min(1, Math.max(0, gain));
   }
 
+  /**
+   * Effective playback speed for the current item.
+   * @returns Item rate × channel rate
+   */
+  effectiveRate(): number {
+    return (this.head?.playbackRate ?? 1) * this.playbackRate;
+  }
+
+  /** Cancels the gap timer between items. */
+  clearGap(): void {
+    if (this.gapTimer !== undefined) clearTimeout(this.gapTimer);
+    this.gapTimer = undefined;
+  }
+
+  /**
+   * Records a finished item, keeping at most `limit` entries.
+   * @param entry - The finished item
+   * @param limit - Maximum history length (0 keeps nothing)
+   */
+  remember(entry: HistoryEntry, limit: number): void {
+    if (limit <= 0) return;
+    this.history.push(entry);
+    if (this.history.length > limit) this.history.splice(0, this.history.length - limit);
+  }
+
+  /**
+   * Whether `src` was queued within its dedupe window; records it for `windowMs` otherwise.
+   * @param src - Source URL
+   * @param windowMs - Dedupe window in milliseconds
+   * @param now - Current time (`Date.now()`)
+   * @returns True when this is a repeat that should be skipped
+   */
+  isDuplicate(src: string, windowMs: number, now: number): boolean {
+    for (const [source, until] of this.recentSources) {
+      if (until <= now) this.recentSources.delete(source);
+    }
+    if ((this.recentSources.get(src) ?? 0) > now) return true;
+    this.recentSources.set(src, now + windowMs);
+    return false;
+  }
+
   /** Cancels every running transition on this channel. */
   cancelTweens(): void {
     this.volumeTween?.cancel();
@@ -119,11 +191,13 @@ export class Channel {
   describeItems(): QueueItem[] {
     return this.items.map((item, index) => ({
       duration: item.element ? secondsToMs(item.element.duration) : 0,
-      fileName: extractFileName(item.src),
+      fileName: item.fileName,
       id: item.id,
       isCurrentlyPlaying:
         index === 0 && !this.paused && item.element !== undefined && !item.element.paused,
       isLooping: item.loop,
+      metadata: item.metadata,
+      playbackRate: item.playbackRate,
       src: item.src,
       volume: item.volume
     }));

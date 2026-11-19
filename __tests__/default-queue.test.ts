@@ -129,6 +129,18 @@ describe('top-level functions', () => {
     api.offAudioPause();
     api.offAudioResume();
     api.offAudioError();
+    api.setPlaybackRate(0, 1.5);
+    expect(api.getPlaybackRate(0)).toBe(1.5);
+    api.setRepeatMode(0, 'all');
+    expect(api.getRepeatMode(0)).toBe('all');
+    api.setRepeatMode(0, 'off');
+    api.setChannelGap(0, 0);
+    expect(api.getChannelGap(0)).toBe(0);
+    expect(api.seekTo(0, 0)).toBe(true);
+    expect(api.seekBy(0, 0)).toBe(true);
+    expect((await api.shuffleQueue(0)).success).toBe(true);
+    expect(Array.isArray(api.getHistory(0))).toBe(true);
+    api.clearHistory(0);
     await api.clearQueueAfterCurrent();
     await api.stopCurrentAudioInChannel();
     await api.stopAllAudioInChannel();

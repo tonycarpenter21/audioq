@@ -37,7 +37,9 @@ export class FakeAudio extends EventTarget {
   paused: boolean = true;
   playBehavior: PlayBehavior | undefined;
   playCalls: number = 0;
+  playbackRate: number = 1;
   preload: string = '';
+  preservesPitch: boolean = false;
   readyState: number = 0;
   volume: number = 1;
   private source: string = '';
@@ -86,12 +88,12 @@ export class FakeAudio extends EventTarget {
     const behavior = this.playBehavior ?? FakeAudio.defaultPlayBehavior;
     switch (behavior) {
       case 'resolve':
-        this.paused = false;
+        this.markPlaying();
         this.ended = false;
         void Promise.resolve().then(() => this.startPlaying());
         return Promise.resolve();
       case 'resolve-silently':
-        this.paused = false;
+        this.markPlaying();
         return Promise.resolve();
       case 'not-allowed':
         return Promise.reject(makeDomError('NotAllowedError', 'play() requires a user gesture'));
@@ -102,13 +104,34 @@ export class FakeAudio extends EventTarget {
       case 'generic-error':
         return Promise.reject(makeDomError('WeirdError', 'Something odd'));
       case 'hang':
+        this.markPlaying();
         return new Promise<void>(() => undefined);
       case 'throw-sync':
         throw makeDomError('InvalidStateError', 'Synchronous failure');
     }
   }
 
+  /** Like a browser: leaving the paused state fires `play` (asynchronously). */
+  private markPlaying(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    void Promise.resolve().then(() => this.fire('play'));
+  }
+
   // ------------------------------------------------------------ simulation helpers
+
+  /** Simulates the OS or browser pausing playback (phone call, unplugged headphones). */
+  externalPause(): void {
+    this.paused = true;
+    this.fire('pause');
+  }
+
+  /** Simulates the OS resuming playback (lock-screen play button). */
+  externalPlay(): void {
+    this.paused = false;
+    this.fire('play');
+    this.fire('playing');
+  }
 
   /** Fires an event of the given type. */
   fire(type: string): void {
@@ -124,11 +147,14 @@ export class FakeAudio extends EventTarget {
     this.fire('playing');
   }
 
-  /** Simulates reaching the end. */
+  /** Simulates reaching the end the way browsers do: `pause` fires just before `ended`. */
   finish(): void {
     this.currentTime = this.duration;
     this.ended = true;
-    this.paused = true;
+    if (!this.paused) {
+      this.paused = true;
+      this.fire('pause');
+    }
     this.fire('ended');
   }
 
@@ -220,6 +246,21 @@ export const installFakeAudioContext = (): void => {
 export const removeAudioContext = (): void => {
   delete (globalThis as Globals).AudioContext;
   delete (globalThis as Globals).webkitAudioContext;
+};
+
+/** Stubs URL.createObjectURL / revokeObjectURL (jsdom does not implement them). */
+export const installObjectUrls = (): { create: jest.Mock; revoke: jest.Mock } => {
+  let next = 0;
+  const create = jest.fn(() => `blob:http://localhost/object-${++next}`);
+  const revoke = jest.fn();
+  Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke });
+  return { create, revoke };
+};
+
+/** Sets document.hidden and fires visibilitychange. */
+export const setPageHidden = (hidden: boolean): void => {
+  Object.defineProperty(document, 'hidden', { configurable: true, value: hidden });
+  document.dispatchEvent(new Event('visibilitychange'));
 };
 
 /** Lets pending promise callbacks run (works with fake timers). */

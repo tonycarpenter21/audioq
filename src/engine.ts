@@ -13,6 +13,7 @@ import { Channel } from './channel.js';
 import type { Item } from './channel.js';
 import {
   DEFAULT_DUCK_TRANSITION_MS,
+  clampPlaybackRate,
   defaultQueueConfig,
   getFadeConfig,
   mergeQueueConfig
@@ -37,6 +38,7 @@ import {
   type AudioErrorInfo,
   type AudioInfo,
   type AudioQueueOptions,
+  type AudioSource,
   type AudioStartInfo,
   type CompletionReason,
   type ItemOutcome,
@@ -75,6 +77,7 @@ export class QueueEngine {
   protected globalVolume: number = 1;
   protected nextId: number = 1;
   protected unlockArmed: boolean = false;
+  protected visibilityArmed: boolean = false;
   protected readonly webAudio: WebAudioEngine = new WebAudioEngine();
 
   /**
@@ -85,6 +88,7 @@ export class QueueEngine {
     this.emitter = new Emitter<QueueEvents>((error) =>
       this.config.logger?.error('audioq: error in event listener', error)
     );
+    this.syncVisibilityListener();
   }
 
   protected subscribe<K extends keyof QueueEvents>(
@@ -134,34 +138,93 @@ export class QueueEngine {
   }
 
   protected createItem(
-    url: string,
+    source: AudioSource,
     channelNumber: number,
     options: AudioQueueOptions
+  ): { handle: QueuedAudio; item: Item } {
+    const isBlob = typeof Blob !== 'undefined' && source instanceof Blob;
+    const objectUrl = isBlob ? URL.createObjectURL(source) : undefined;
+    const src = objectUrl ?? resolveUrl(String(source));
+    const blobName = isBlob ? (source as Blob & { name?: unknown }).name : undefined;
+    const fileName =
+      typeof blobName === 'string' && blobName.length > 0
+        ? blobName
+        : isBlob
+          ? (options.metadata?.title ?? 'audio')
+          : extractFileName(src);
+    return this.buildItem(channelNumber, {
+      crossOrigin: options.crossOrigin,
+      fileName,
+      loop: options.loop === true,
+      metadata: options.metadata,
+      objectUrl,
+      playbackRate: clampPlaybackRate(options.playbackRate),
+      src,
+      startAt: Number.isFinite(options.startAt) ? Math.max(0, options.startAt as number) : 0,
+      volume: clampUnit(options.volume ?? 1)
+    });
+  }
+
+  /** Creates an item plus its public handle from already-normalized settings. */
+  protected buildItem(
+    channelNumber: number,
+    settings: Pick<
+      Item,
+      | 'crossOrigin'
+      | 'fileName'
+      | 'loop'
+      | 'metadata'
+      | 'objectUrl'
+      | 'playbackRate'
+      | 'src'
+      | 'startAt'
+      | 'volume'
+    >
   ): { handle: QueuedAudio; item: Item } {
     let resolveStarted: (started: boolean) => void = () => undefined;
     let resolveFinished: (outcome: ItemOutcome) => void = () => undefined;
     const started = new Promise<boolean>((resolve) => (resolveStarted = resolve));
     const finished = new Promise<ItemOutcome>((resolve) => (resolveFinished = resolve));
     const item: Item = {
+      ...settings,
       blocked: false,
       channelNumber,
-      crossOrigin: options.crossOrigin,
       disposers: [],
       element: undefined,
       id: this.nextId++,
       loadTimer: undefined,
-      loop: options.loop === true,
       playRequested: false,
       resolveFinished,
       resolveStarted,
       route: undefined,
       settled: false,
-      src: resolveUrl(url),
-      started: false,
-      volume: clampUnit(options.volume ?? 1)
+      started: false
     };
-    const handle: QueuedAudio = { channelNumber, finished, id: item.id, src: item.src, started };
+    const handle: QueuedAudio = {
+      channelNumber,
+      finished,
+      id: item.id,
+      metadata: item.metadata,
+      src: item.src,
+      started
+    };
     return { handle, item };
+  }
+
+  /** A handle for a call that was ignored (dedupe): it never plays. */
+  protected skippedHandle(
+    channelNumber: number,
+    src: string,
+    options: AudioQueueOptions
+  ): QueuedAudio {
+    return {
+      channelNumber,
+      finished: Promise.resolve('skipped'),
+      id: this.nextId++,
+      metadata: options.metadata,
+      src,
+      started: Promise.resolve(false)
+    };
   }
 
   /** Makes sure the current item is playing (unless paused) and upcoming items are preloaded. */
@@ -169,7 +232,8 @@ export class QueueEngine {
     const upcoming = channel.items.slice(0, this.config.prefetchCount + 1);
     upcoming.forEach((item) => this.ensureElement(channel, item));
     const head = channel.head;
-    if (head && !channel.paused && !head.playRequested && !head.blocked) {
+    const waiting = channel.gapTimer !== undefined;
+    if (head && !channel.paused && !head.playRequested && !head.blocked && !waiting) {
       void this.play(channel, head);
     }
     this.updateDucking();
@@ -180,6 +244,7 @@ export class QueueEngine {
     const element = new Audio();
     element.preload = 'auto';
     element.loop = item.loop;
+    element.preservesPitch = true;
     if (item.crossOrigin !== undefined) element.crossOrigin = item.crossOrigin;
     element.src = item.src;
     item.element = element;
@@ -197,8 +262,19 @@ export class QueueEngine {
       listen(
         element,
         'ended',
-        whenHead(() => this.advance(channel, 'ended'))
+        whenHead(() => this.onEnded(channel, item))
       ),
+      listen(
+        element,
+        'pause',
+        whenHead(() => this.onElementPause(channel, item, element))
+      ),
+      listen(
+        element,
+        'play',
+        whenHead(() => this.onElementPlay(channel, item))
+      ),
+      listen(element, 'loadedmetadata', () => this.applyStartAt(item, element)),
       listen(element, 'error', () => {
         if (!item.settled) this.onElementError(channel, item);
       }),
@@ -227,6 +303,8 @@ export class QueueEngine {
     const element = this.ensureElement(channel, item);
     item.playRequested = true;
     this.applyGain(channel);
+    this.applyRate(channel);
+    this.applyStartAt(item, element);
     this.startLoadTimer(channel, item);
     let attempt: Promise<void>;
     try {
@@ -249,7 +327,9 @@ export class QueueEngine {
     this.emitter.emit('start', channel.channelNumber, {
       channelNumber: channel.channelNumber,
       duration: secondsToMs(item.element?.duration ?? NaN),
-      fileName: extractFileName(item.src),
+      fileName: item.fileName,
+      id: item.id,
+      metadata: item.metadata,
       src: item.src
     });
   }
@@ -298,10 +378,104 @@ export class QueueEngine {
     if (!head) return;
     channel.paused = false;
     this.resetFade(channel);
-    this.emitComplete(channel, head, reason);
-    this.finalize(head, reason);
+    this.retire(channel, head, reason, channel.items.length);
     this.emitQueueChange(channel);
+    this.startGap(channel);
     this.refresh(channel);
+  }
+
+  /** Reports a finished item (complete event and history), then releases it. */
+  protected retire(
+    channel: Channel,
+    item: Item,
+    reason: CompletionReason,
+    remainingInQueue: number
+  ): void {
+    this.report(channel, item, reason, remainingInQueue);
+    this.finalize(item, reason);
+  }
+
+  /** Emits the complete event for an item and records it in the channel history. */
+  protected report(
+    channel: Channel,
+    item: Item,
+    reason: CompletionReason,
+    remainingInQueue: number
+  ): void {
+    const entry = {
+      channelNumber: channel.channelNumber,
+      fileName: item.fileName,
+      id: item.id,
+      metadata: item.metadata,
+      playedMs: secondsToMs(item.element?.currentTime ?? 0),
+      reason,
+      src: item.src
+    };
+    this.emitter.emit('complete', channel.channelNumber, { ...entry, remainingInQueue });
+    channel.remember({ ...entry, finishedAt: Date.now() }, this.config.historySize);
+  }
+
+  /** Removes every item from a channel: the current one is reported as stopped. */
+  protected clearChannel(channel: Channel): void {
+    const removed = channel.items.splice(0, channel.items.length);
+    channel.paused = false;
+    channel.hiddenPause = false;
+    channel.clearGap();
+    this.resetFade(channel);
+    const [head, ...rest] = removed;
+    if (head) this.retire(channel, head, 'stopped', 0);
+    rest.forEach((item) => this.finalize(item, 'removed'));
+    if (removed.length > 0) this.emitQueueChange(channel);
+    this.updateDucking();
+  }
+
+  /** An item reached its end: repeat it, re-queue it, or move on. */
+  protected onEnded(channel: Channel, item: Item): void {
+    if (channel.repeat === 'one') {
+      this.retireForRepeat(channel, item);
+      return;
+    }
+    if (channel.repeat === 'all') channel.items.push(this.copyForRepeat(item));
+    this.advance(channel, 'ended');
+  }
+
+  /** Repeat-one: report the play-through, then play the same item again from the start. */
+  protected retireForRepeat(channel: Channel, item: Item): void {
+    this.report(channel, item, 'ended', channel.items.length - 1);
+    item.started = false;
+    item.playRequested = false;
+    item.startAt = 0;
+    if (item.element) item.element.currentTime = 0;
+    this.startGap(channel);
+    this.refresh(channel);
+  }
+
+  /** Repeat-all: a fresh copy of a finished item for the end of the queue. */
+  protected copyForRepeat(item: Item): Item {
+    const { item: copy } = this.buildItem(item.channelNumber, {
+      crossOrigin: item.crossOrigin,
+      fileName: item.fileName,
+      loop: item.loop,
+      metadata: item.metadata,
+      objectUrl: item.objectUrl,
+      playbackRate: item.playbackRate,
+      src: item.src,
+      startAt: 0,
+      volume: item.volume
+    });
+    // The copy now owns the Blob's object URL, so releasing the original must not revoke it.
+    item.objectUrl = undefined;
+    return copy;
+  }
+
+  /** Waits `gapMs` before the next item starts. */
+  protected startGap(channel: Channel): void {
+    channel.clearGap();
+    if (channel.gapMs <= 0 || channel.items.length === 0) return;
+    channel.gapTimer = setTimeout(() => {
+      channel.gapTimer = undefined;
+      this.refresh(channel);
+    }, channel.gapMs);
   }
 
   /** Releases everything an item holds. Safe to call more than once. */
@@ -316,6 +490,8 @@ export class QueueEngine {
     item.route = undefined;
     if (item.element) releaseElement(item.element);
     item.element = undefined;
+    if (item.objectUrl !== undefined) URL.revokeObjectURL(item.objectUrl);
+    item.objectUrl = undefined;
     if (!item.started) item.resolveStarted(false);
     item.resolveFinished(outcome);
     if (!this.hasBlockedItems()) this.disarmUnlock();
@@ -427,6 +603,88 @@ export class QueueEngine {
     }
   }
 
+  protected applyRate(channel: Channel): void {
+    const element = channel.head?.element;
+    if (element) element.playbackRate = channel.effectiveRate();
+  }
+
+  /** Jumps to `startAt` once, before the item has played. */
+  protected applyStartAt(item: Item, element: HTMLAudioElement): void {
+    if (item.started || item.startAt <= 0) return;
+    try {
+      element.currentTime = item.startAt / 1000;
+    } catch {
+      // Not seekable yet; retried on loadedmetadata.
+    }
+  }
+
+  /** The browser or OS paused playback (phone call, headphones unplugged, media controls). */
+  protected onElementPause(channel: Channel, item: Item, element: HTMLAudioElement): void {
+    // Our own pauses set channel.paused first; the pause fired right before `ended` is not one.
+    if (channel.paused || element.ended || !item.started) return;
+    channel.paused = true;
+    item.playRequested = false;
+    this.clearLoadTimer(item);
+    this.emitter.emit('pause', channel.channelNumber, this.describeHead(channel, item));
+  }
+
+  /** The browser or OS resumed playback (for example from lock-screen controls). */
+  protected onElementPlay(channel: Channel, item: Item): void {
+    if (!channel.paused) return;
+    channel.paused = false;
+    channel.hiddenPause = false;
+    item.playRequested = true;
+    this.resetFade(channel);
+    this.emitter.emit('resume', channel.channelNumber, this.describeHead(channel, item));
+  }
+
+  /** Pauses a channel now (shared by pauseChannel, fades and pauseWhenHidden). */
+  protected pauseNow(channel: Channel): void {
+    const head = channel.head;
+    if (!head || channel.paused) return;
+    channel.fadeTween?.cancel();
+    channel.paused = true;
+    head.playRequested = false;
+    this.clearLoadTimer(head);
+    head.element?.pause();
+    this.emitter.emit('pause', channel.channelNumber, this.describeHead(channel, head));
+  }
+
+  /** Resumes a paused channel; resolves once the browser accepted or refused playback. */
+  protected async resumeNow(channel: Channel): Promise<void> {
+    const head = channel.head;
+    if (!head || !channel.paused) return;
+    this.resetFade(channel);
+    channel.paused = false;
+    channel.hiddenPause = false;
+    const attempt = channel.gapTimer === undefined ? this.play(channel, head) : undefined;
+    this.emitter.emit('resume', channel.channelNumber, this.describeHead(channel, head));
+    await attempt;
+  }
+
+  protected readonly onVisibilityChange = (): void => {
+    if (typeof document === 'undefined') return;
+    this.channels.forEach((channel) => {
+      if (document.hidden) {
+        if (!channel.head || channel.paused) return;
+        this.pauseNow(channel);
+        channel.hiddenPause = true;
+      } else if (channel.hiddenPause) {
+        void this.resumeNow(channel);
+      }
+    });
+  };
+
+  /** Adds or removes the visibilitychange listener to match `pauseWhenHidden`. */
+  protected syncVisibilityListener(): void {
+    if (typeof document === 'undefined') return;
+    const wanted = this.config.pauseWhenHidden;
+    if (wanted === this.visibilityArmed) return;
+    this.visibilityArmed = wanted;
+    if (wanted) document.addEventListener('visibilitychange', this.onVisibilityChange);
+    else document.removeEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
   protected anyPlaying(): boolean {
     for (const channel of this.channels.values()) {
       if (channel.head && !channel.paused) return true;
@@ -526,10 +784,14 @@ export class QueueEngine {
     return {
       currentTime,
       duration,
-      fileName: extractFileName(item.src),
+      fileName: item.fileName,
+      id: item.id,
+      isLoading: (element?.readyState ?? 0) < 3,
       isLooping: item.loop,
       isPaused,
       isPlaying: !isPaused && item.started && !(element?.ended ?? false),
+      metadata: item.metadata,
+      playbackRate: channel.effectiveRate(),
       progress: duration > 0 ? Math.min(1, currentTime / duration) : 0,
       remainingInQueue: Math.max(0, channel.items.length - 1),
       src: item.src,
@@ -547,16 +809,6 @@ export class QueueEngine {
     this.emitter.emit('queuechange', channel.channelNumber, this.snapshot(channel));
   }
 
-  protected emitComplete(channel: Channel, item: Item, reason: CompletionReason): void {
-    this.emitter.emit('complete', channel.channelNumber, {
-      channelNumber: channel.channelNumber,
-      fileName: extractFileName(item.src),
-      reason,
-      remainingInQueue: channel.items.length,
-      src: item.src
-    });
-  }
-
   protected emitError(
     channel: Channel,
     item: Item,
@@ -568,7 +820,9 @@ export class QueueEngine {
       channelNumber: channel.channelNumber,
       error,
       errorType,
-      fileName: extractFileName(item.src),
+      fileName: item.fileName,
+      id: item.id,
+      metadata: item.metadata,
       remainingInQueue: Math.max(0, remainingInQueue),
       src: item.src,
       timestamp: Date.now()

@@ -1,5 +1,7 @@
 import {
   DEFAULT_DUCK_TRANSITION_MS,
+  PLAYBACK_RATE_RANGE,
+  clampPlaybackRate,
   consoleLogger,
   defaultQueueConfig,
   getFadeConfig,
@@ -110,5 +112,22 @@ describe('validateVolumeConfig', () => {
 
   test('exposes the default duck transition', () => {
     expect(DEFAULT_DUCK_TRANSITION_MS).toBe(250);
+  });
+});
+
+describe('playback rate limits', () => {
+  test('PLAYBACK_RATE_RANGE is 0.25 to 4', () => {
+    expect(PLAYBACK_RATE_RANGE).toEqual([0.25, 4]);
+  });
+
+  test.each([
+    [1.5, 1.5],
+    [0.1, 0.25],
+    [9, 4],
+    [NaN, 1],
+    [Infinity, 1],
+    [undefined, 1]
+  ])('clampPlaybackRate(%p) is %p', (input, expected) => {
+    expect(clampPlaybackRate(input)).toBe(expected);
   });
 });

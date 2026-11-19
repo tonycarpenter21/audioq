@@ -48,8 +48,63 @@ export enum FadeType {
 /** Why an item left the front of its channel. */
 export type CompletionReason = 'ended' | 'stopped' | 'error';
 
-/** How an item's lifecycle finished. */
-export type ItemOutcome = CompletionReason | 'removed';
+/**
+ * How an item's lifecycle finished: it left the front of its channel (`ended`, `stopped`,
+ * `error`), was removed while waiting (`removed`), or was never queued because of `dedupeMs`
+ * (`skipped`).
+ */
+export type ItemOutcome = CompletionReason | 'removed' | 'skipped';
+
+/** What a channel does when an item ends: nothing, replay the item, or replay the whole queue. */
+export type RepeatMode = 'off' | 'one' | 'all';
+
+/** Image for lock screens and media notifications (same shape as the Media Session API's). */
+export interface AudioArtwork {
+  /** Size hint, for example `'512x512'`. */
+  sizes?: string;
+  /** Image URL. */
+  src: string;
+  /** MIME type, for example `'image/png'`. */
+  type?: string;
+}
+
+/**
+ * Information you attach to a queued item. It is returned in every event and snapshot for that
+ * item, and `title`/`artist`/`album`/`artwork` are shown on lock screens by `connectMediaSession`.
+ * Add any other fields you need (an id from your app, a transcript, ...).
+ */
+export interface AudioMetadata {
+  /** Album or collection name. */
+  album?: string;
+  /** Artist, speaker or author. */
+  artist?: string;
+  /** Artwork for media controls. */
+  artwork?: AudioArtwork[];
+  /** Display title. */
+  title?: string;
+  /** Any other data you want to carry with the item. */
+  [key: string]: unknown;
+}
+
+/** A finished item, as recorded in a channel's history. */
+export interface HistoryEntry {
+  /** Channel the item played on. */
+  channelNumber: number;
+  /** File name taken from the URL (or the File name for File sources). */
+  fileName: string;
+  /** `Date.now()` when the item finished. */
+  finishedAt: number;
+  /** Unique id of the item. */
+  id: number;
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
+  /** Milliseconds of audio played before the item finished. */
+  playedMs: number;
+  /** Why the item finished. */
+  reason: CompletionReason;
+  /** Source URL. */
+  src: string;
+}
 
 /** When to route audio through the Web Audio API (needed for volume control on iOS). */
 export type WebAudioMode = 'off' | 'auto' | 'force';
@@ -58,6 +113,23 @@ export type WebAudioMode = 'off' | 'auto' | 'force';
 export interface AudioQueueOptions {
   /** Insert right after the currently playing item instead of at the end. */
   addToFront?: boolean;
+  /**
+   * Ignore this call if the same source was queued on this channel within the last `dedupeMs`
+   * milliseconds (for notification sounds that may fire in bursts). The returned handle settles
+   * with `'skipped'`.
+   */
+  dedupeMs?: number;
+  /**
+   * Stop the current item and clear the channel, then play this one immediately
+   * (barge-in for voice assistants, or a sound that replaces whatever is playing).
+   */
+  interrupt?: boolean;
+  /** Information returned with every event for this item; see {@link AudioMetadata}. */
+  metadata?: AudioMetadata;
+  /** Playback speed for this item (0.25-4, pitch preserved). Multiplied with the channel rate. */
+  playbackRate?: number;
+  /** Start playback this many milliseconds into the file (for resuming). */
+  startAt?: number;
   /**
    * CORS mode for the element. Set this when the file is on another origin that sends CORS
    * headers and you need Web Audio volume control (iOS) for it.
@@ -91,6 +163,13 @@ export interface QueueConfig {
   logger: Logger | null;
   /** Highest channel number allowed is `maxChannels - 1`. */
   maxChannels: number;
+  /** Finished items remembered per channel for `getHistory` (0 turns history off). */
+  historySize: number;
+  /**
+   * Pause playing channels while the page is hidden (tab switched, phone locked) and resume them
+   * when it is visible again.
+   */
+  pauseWhenHidden: boolean;
   /** How many items after the playing one are preloaded. The rest are not fetched until needed. */
   prefetchCount: number;
   /** Log a warning when a queue limit is hit. */
@@ -133,12 +212,20 @@ export interface AudioInfo {
   duration: number;
   /** File name taken from the URL, decoded. Not HTML-escaped: escape when rendering as HTML. */
   fileName: string;
+  /** Unique id of the item. */
+  id: number;
+  /** Whether the item is still loading (not enough data to play yet). */
+  isLoading: boolean;
   /** Whether the item loops. */
   isLooping: boolean;
   /** Whether playback is paused. */
   isPaused: boolean;
   /** Whether audio is actively playing. */
   isPlaying: boolean;
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
+  /** Effective playback speed (item rate × channel rate). */
+  playbackRate: number;
   /** Progress from 0 to 1. */
   progress: number;
   /** Items waiting after this one. */
@@ -157,6 +244,10 @@ export interface AudioStartInfo {
   duration: number;
   /** File name taken from the URL. */
   fileName: string;
+  /** Unique id of the item. */
+  id: number;
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
   /** Resolved source URL. */
   src: string;
 }
@@ -167,6 +258,12 @@ export interface AudioCompleteInfo {
   channelNumber: number;
   /** File name taken from the URL. */
   fileName: string;
+  /** Unique id of the item. */
+  id: number;
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
+  /** Milliseconds of audio played before the item finished. */
+  playedMs: number;
   /** Why the item finished. */
   reason: CompletionReason;
   /** Items left in the channel after this one was removed. */
@@ -185,6 +282,10 @@ export interface AudioErrorInfo {
   errorType: AudioErrorType;
   /** File name taken from the URL. */
   fileName: string;
+  /** Unique id of the failing item. */
+  id: number;
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
   /** Items left in the channel after the failing one was removed. */
   remainingInQueue: number;
   /** Resolved source URL. */
@@ -205,6 +306,10 @@ export interface QueueItem {
   isCurrentlyPlaying: boolean;
   /** Whether the item loops. */
   isLooping: boolean;
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
+  /** Item playback speed (before the channel rate). */
+  playbackRate: number;
   /** Resolved source URL. */
   src: string;
   /** Item volume multiplier (0-1). */
@@ -245,7 +350,9 @@ export interface QueuedAudio {
   finished: Promise<ItemOutcome>;
   /** Unique id of the item (matches `QueueItem.id`). */
   id: number;
-  /** Resolved source URL. */
+  /** Metadata given when the item was queued. */
+  metadata: AudioMetadata | undefined;
+  /** Resolved source URL (an object URL for Blob sources). */
   src: string;
   /** Resolves `true` when playback starts, or `false` if the item leaves the queue first. */
   started: Promise<boolean>;
@@ -277,5 +384,7 @@ export type AudioPauseCallback = (channelNumber: number, info: AudioInfo) => voi
 export type AudioResumeCallback = (channelNumber: number, info: AudioInfo) => void;
 /** Listener for errors. */
 export type AudioErrorCallback = (info: AudioErrorInfo) => void;
+/** What can be queued: a URL (relative, absolute, blob: or data:) or a Blob/File. */
+export type AudioSource = string | Blob;
 /** Removes the listener it was returned for. Safe to call more than once. */
 export type Unsubscribe = () => void;

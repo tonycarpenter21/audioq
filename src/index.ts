@@ -7,7 +7,7 @@
  */
 
 export { AudioQueue, createAudioQueue } from './audio-queue.js';
-export { getFadeConfig } from './config.js';
+export { PLAYBACK_RATE_RANGE, getFadeConfig } from './config.js';
 export * from './default-queue.js';
 export { extractFileName } from './utils.js';
 export { isIOSDevice, isWebAudioSupported } from './web-audio.js';
@@ -20,12 +20,16 @@ export type {
   AudioErrorInfo,
   AudioInfo,
   AudioPauseCallback,
+  AudioArtwork,
+  AudioMetadata,
   AudioQueueOptions,
+  AudioSource,
   AudioResumeCallback,
   AudioStartCallback,
   AudioStartInfo,
   CompletionReason,
   FadeConfig,
+  HistoryEntry,
   ItemOutcome,
   Logger,
   ProgressCallback,
@@ -35,6 +39,7 @@ export type {
   QueueManipulationResult,
   QueueSnapshot,
   QueuedAudio,
+  RepeatMode,
   Unsubscribe,
   VolumeConfig,
   WebAudioMode,

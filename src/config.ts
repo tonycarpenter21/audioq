@@ -11,6 +11,19 @@ export const consoleLogger: Logger = {
   warn: (...args: unknown[]): void => console.warn(...args)
 };
 
+/** Slowest and fastest playback speeds accepted (pitch is preserved). */
+export const PLAYBACK_RATE_RANGE: readonly [number, number] = [0.25, 4];
+
+/**
+ * Clamps a playback speed to {@link PLAYBACK_RATE_RANGE}; non-finite values become 1.
+ * @param rate - Requested speed
+ * @returns A speed browsers accept
+ */
+export const clampPlaybackRate = (rate: number | undefined): number => {
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) return 1;
+  return Math.min(PLAYBACK_RATE_RANGE[1], Math.max(PLAYBACK_RATE_RANGE[0], rate));
+};
+
 /** Default fade duration for ducking transitions in milliseconds. */
 export const DEFAULT_DUCK_TRANSITION_MS: number = 250;
 
@@ -21,9 +34,11 @@ export const DEFAULT_DUCK_TRANSITION_MS: number = 250;
 export const defaultQueueConfig = (): QueueConfig => ({
   defaultMaxQueueSize: undefined,
   dropOldestWhenFull: false,
+  historySize: 20,
   loadTimeoutMs: 15000,
   logger: consoleLogger,
   maxChannels: MAX_CHANNELS,
+  pauseWhenHidden: false,
   prefetchCount: 1,
   showQueueWarnings: true,
   webAudio: 'auto'
@@ -76,6 +91,9 @@ export const mergeQueueConfig = (base: QueueConfig, patch: Partial<QueueConfig>)
   }
   if (!isNonNegativeInteger(next.maxChannels) || next.maxChannels < 1) {
     throw new RangeError('maxChannels must be a positive integer');
+  }
+  if (!isNonNegativeInteger(next.historySize)) {
+    throw new RangeError('historySize must be a non-negative integer');
   }
   if (!isNonNegativeInteger(next.prefetchCount)) {
     throw new RangeError('prefetchCount must be a non-negative integer');

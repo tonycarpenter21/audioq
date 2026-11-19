@@ -9,15 +9,20 @@ const item = (overrides: Partial<Item> = {}): Item => ({
   crossOrigin: undefined,
   disposers: [],
   element: undefined,
+  fileName: 'a b.mp3',
   id: 1,
   loadTimer: undefined,
   loop: false,
+  metadata: undefined,
+  objectUrl: undefined,
+  playbackRate: 1,
   playRequested: false,
   resolveFinished: jest.fn(),
   resolveStarted: jest.fn(),
   route: undefined,
   settled: false,
   src: 'http://localhost/a%20b.mp3',
+  startAt: 0,
   started: false,
   volume: 1,
   ...overrides
@@ -96,5 +101,58 @@ describe('Channel', () => {
     });
     channel.paused = true;
     expect(channel.describeItems()[0]?.isCurrentlyPlaying).toBe(false);
+  });
+});
+
+describe('Channel feature helpers', () => {
+  test('effectiveRate multiplies the item and channel rates', () => {
+    const channel = new Channel(0);
+    expect(channel.effectiveRate()).toBe(1);
+    channel.items.push(item({ playbackRate: 0.5 }));
+    channel.playbackRate = 3;
+    expect(channel.effectiveRate()).toBe(1.5);
+  });
+
+  test('clearGap cancels a pending gap timer and is idempotent', () => {
+    jest.useFakeTimers();
+    try {
+      const channel = new Channel(0);
+      const fired = jest.fn();
+      channel.gapTimer = setTimeout(fired, 100) as unknown as Channel['gapTimer'];
+      channel.clearGap();
+      channel.clearGap();
+      jest.advanceTimersByTime(200);
+      expect(fired).not.toHaveBeenCalled();
+      expect(channel.gapTimer).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('remember keeps the newest entries up to the limit; 0 keeps none', () => {
+    const channel = new Channel(0);
+    const entry = (id: number) => ({
+      channelNumber: 0,
+      fileName: `${id}.mp3`,
+      finishedAt: id,
+      id,
+      metadata: undefined,
+      playedMs: 0,
+      reason: 'ended' as const,
+      src: `/${id}.mp3`
+    });
+    [1, 2, 3].forEach((id) => channel.remember(entry(id), 2));
+    expect(channel.history.map((e) => e.id)).toEqual([2, 3]);
+    channel.remember(entry(4), 0);
+    expect(channel.history.map((e) => e.id)).toEqual([2, 3]);
+  });
+
+  test('isDuplicate tracks a window per source and forgets expired entries', () => {
+    const channel = new Channel(0);
+    expect(channel.isDuplicate('/a.mp3', 1000, 0)).toBe(false);
+    expect(channel.isDuplicate('/a.mp3', 1000, 999)).toBe(true);
+    expect(channel.isDuplicate('/b.mp3', 1000, 999)).toBe(false);
+    expect(channel.isDuplicate('/a.mp3', 1000, 1000)).toBe(false);
+    expect(channel.recentSources.size).toBe(2);
   });
 });

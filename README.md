@@ -52,25 +52,31 @@ SvelteKit). Audio only starts when you call `queueAudio` in the browser.
 
 ## Queueing
 
-`queueAudio(url, channel?, options?)` accepts relative and absolute URLs, `blob:` URLs and
-`data:` URIs. It resolves as soon as the item is queued and returns a handle:
+`queueAudio(source, channel?, options?)` accepts relative and absolute URLs, `blob:` URLs,
+`data:` URIs, and `Blob`/`File` objects (object URLs are created and revoked for you). It
+resolves as soon as the item is queued and returns a handle:
 
 ```ts
 const item = await queueAudio('/voice/intro.mp3');
 const didStart = await item.started; // true once playback starts, false if it never does
-const outcome = await item.finished; // 'ended' | 'stopped' | 'error' | 'removed'
+const outcome = await item.finished; // 'ended' | 'stopped' | 'error' | 'removed' | 'skipped'
 console.log(item.id, item.src, item.channelNumber, didStart, outcome);
 ```
 
 Options (`AudioQueueOptions`):
 
-| Option         | Description                                                            |
-| -------------- | ---------------------------------------------------------------------- |
-| `addToFront`   | Play right after the current item instead of at the end.               |
-| `loop`         | Repeat until stopped.                                                  |
-| `volume`       | Item volume (0-1), multiplied with the channel and global volume.      |
-| `maxQueueSize` | Queue limit for this call only.                                        |
-| `crossOrigin`  | `'anonymous'` or `'use-credentials'` for CORS-enabled files (see iOS). |
+| Option         | Description                                                                      |
+| -------------- | -------------------------------------------------------------------------------- |
+| `addToFront`   | Play right after the current item instead of at the end.                         |
+| `interrupt`    | Stop the current item and clear the channel, then play this one now.             |
+| `dedupeMs`     | Ignore the call if the same source was queued on the channel this recently.      |
+| `metadata`     | Your data (`title`, `artist`, `artwork`, ids...), returned with every event.     |
+| `loop`         | Repeat until stopped.                                                            |
+| `volume`       | Item volume (0-1), multiplied with the channel and global volume.                |
+| `playbackRate` | Item speed (0.25-4, pitch preserved), multiplied with the channel speed.         |
+| `startAt`      | Start this many milliseconds into the file (resume where the listener left off). |
+| `maxQueueSize` | Queue limit for this call only.                                                  |
+| `crossOrigin`  | `'anonymous'` or `'use-credentials'` for CORS-enabled files (see iOS).           |
 
 ```ts
 await queueAudioPriority('/sfx/alert.mp3'); // same as { addToFront: true }
@@ -107,6 +113,61 @@ console.log(getQueueLength(), getQueueItemInfo(1)?.fileName);
 
 These return `{ success, error?, updatedQueue? }` instead of throwing.
 
+### Recipes
+
+Notification sounds that may fire in bursts: play each one at most once per second.
+
+```ts
+await queueAudio('/sfx/message.mp3', 3, { dedupeMs: 1000 });
+```
+
+Voice assistants and text-to-speech: queue each generated clip as it arrives, and cut the speech
+off when the user starts talking.
+
+```ts
+const speak = async (text: string): Promise<void> => {
+  const clip = await (await fetch(`/api/tts?text=${encodeURIComponent(text)}`)).blob();
+  await queueAudio(clip, 1, { metadata: { text } });
+};
+await speak('Hello!');
+await queueAudio('/sfx/listening.mp3', 1, { interrupt: true }); // barge-in
+```
+
+Podcasts and audiobooks: resume where the listener stopped, at their preferred speed.
+
+```ts
+await queueAudio('/episodes/42.mp3', 0, { startAt: 754000, metadata: { title: 'Episode 42' } });
+setPlaybackRate(0, 1.5);
+seekBy(0, -15000); // back 15 seconds
+seekTo(0, 60000); // jump to 1:00
+```
+
+Sleep timer and scheduled playback need no API: use a timer.
+
+```ts
+setTimeout(() => void pauseAllWithFade(FadeType.Gentle, 3000), 30 * 60 * 1000);
+setTimeout(() => void queueAudio('/sfx/reminder.mp3'), 5 * 60 * 1000);
+```
+
+## Playlists
+
+```ts
+setRepeatMode(0, 'all'); // 'off' | 'one' | 'all'
+console.log(getRepeatMode(0));
+await shuffleQueue(0); // shuffle the waiting items; the current one keeps playing
+setChannelGap(0, 1500); // 1.5 seconds of silence between items
+console.log(getChannelGap(0), getPlaybackRate(0), PLAYBACK_RATE_RANGE);
+
+for (const entry of getHistory(0)) {
+  console.log(entry.fileName, entry.reason, entry.playedMs); // what played, and how much of it
+}
+clearHistory(0);
+```
+
+`'one'` replays the current item, `'all'` moves each item that finishes to the end of the queue
+so the whole queue repeats. History keeps the last `historySize` items per channel (20 by
+default).
+
 ## Pause, resume and fades
 
 ```ts
@@ -129,6 +190,11 @@ console.log(getFadeConfig(FadeType.Dramatic).duration);
 ```
 
 Calling a resume while a fade-out is still running cancels the pause and fades back in.
+
+When the operating system pauses audio (a phone call, unplugged headphones, the lock screen or
+Control Center), audioq notices: the channel reports as paused and `onAudioPause` fires, and a
+play from the lock screen fires `onAudioResume`. Set `pauseWhenHidden: true` to pause playing
+channels while the page is hidden and resume them when it is visible again.
 
 ## Volume
 
@@ -270,9 +336,11 @@ All Web Audio routing shares one `AudioContext`, closed by `destroyAllChannels()
 | --------------------- | --------- | --------------------------------------------------------------- |
 | `defaultMaxQueueSize` | unlimited | Items per channel, including the playing one.                   |
 | `dropOldestWhenFull`  | `false`   | Drop the oldest waiting item instead of rejecting a new one.    |
+| `historySize`         | `20`      | Finished items remembered per channel for `getHistory`.         |
 | `loadTimeoutMs`       | `15000`   | Skip an item that has not started after this long (0 disables). |
 | `logger`              | `console` | Where warnings go; `null` silences the library.                 |
 | `maxChannels`         | `64`      | Number of channels (`MAX_CHANNELS`).                            |
+| `pauseWhenHidden`     | `false`   | Pause while the page is hidden, resume when visible.            |
 | `prefetchCount`       | `1`       | Waiting items to preload ahead of the current one.              |
 | `showQueueWarnings`   | `true`    | Warn when a queue limit is reached.                             |
 | `webAudio`            | `'auto'`  | `'auto'`, `'force'` or `'off'` (see iOS).                       |
