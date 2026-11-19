@@ -1119,6 +1119,99 @@ describe('volume ducking', () => {
 describe('Web Audio routing', () => {
   beforeEach(() => installFakeAudioContext());
 
+  describe('stereo panning', () => {
+    const context = (): FakeAudioContext => FakeAudioContext.instances[0] as FakeAudioContext;
+
+    test('a panned channel routes through Web Audio on desktop, with the gain node in control', async () => {
+      const queue = setup({ webAudio: 'auto' });
+      queue.setChannelPan(0, -0.5);
+      await queue.queueAudio('/a.mp3');
+      expect(context().panners[0]?.pan.value).toBe(-0.5);
+      expect(audioAt(0).volume).toBe(1);
+      await queue.setChannelVolume(0, 0.4);
+      expect(context().gains[0]?.gain.value).toBeCloseTo(0.4);
+      expect(audioAt(0).volume).toBe(1);
+    });
+
+    test('panning a playing item routes it then, keeping its volume', async () => {
+      const queue = setup({ webAudio: 'auto' });
+      await queue.setChannelVolume(0, 0.3);
+      await queue.queueAudio('/a.mp3');
+      await flush();
+      expect(FakeAudioContext.instances).toHaveLength(0);
+      queue.setChannelPan(0, 1);
+      expect(context().sources).toHaveLength(1);
+      expect(context().panners[0]?.pan.value).toBe(1);
+      expect(context().gains[0]?.gain.value).toBeCloseTo(0.3);
+      expect(audioAt(0).volume).toBe(1);
+      queue.setChannelPan(0, 0.25);
+      expect(context().sources).toHaveLength(1);
+      expect(context().panners[0]?.pan.value).toBe(0.25);
+    });
+
+    test('back to center keeps the route; unpanned channels stay unrouted', async () => {
+      const queue = setup({ webAudio: 'auto' });
+      queue.setChannelPan(0, 0.5);
+      await queue.queueAudio('/a.mp3', 0);
+      await queue.queueAudio('/b.mp3', 1);
+      queue.setChannelPan(0, 0);
+      expect(context().sources).toHaveLength(1);
+      expect(context().panners[0]?.pan.value).toBe(0);
+    });
+
+    test('cross-origin audio without CORS plays centered, with a warning', async () => {
+      const warn = jest.fn();
+      const queue = setup({ logger: { error: jest.fn(), warn }, webAudio: 'auto' });
+      queue.setChannelPan(0, -1);
+      await queue.queueAudio('https://cdn.other.com/a.mp3');
+      expect(FakeAudioContext.instances[0]?.sources ?? []).toHaveLength(0);
+      expect(String(warn.mock.calls[0]?.[0])).toMatch(
+        /cannot pan a\.mp3: cross-origin without CORS/
+      );
+      await queue.queueAudio('https://cdn.other.com/b.mp3', 1, { crossOrigin: 'anonymous' });
+      queue.setChannelPan(1, 1);
+      expect(context().panners[0]?.pan.value).toBe(1);
+    });
+
+    test("webAudio 'off' never routes", async () => {
+      const queue = setup({ webAudio: 'off' });
+      queue.setChannelPan(0, 1);
+      await queue.queueAudio('/a.mp3');
+      expect(FakeAudioContext.instances).toHaveLength(0);
+      expect(queue.getChannelPan(0)).toBe(1);
+    });
+
+    test('browsers without StereoPannerNode still route volume and do not throw', async () => {
+      FakeAudioContext.hasStereoPanner = false;
+      const queue = setup({ webAudio: 'force' });
+      queue.setChannelPan(0, 1);
+      await queue.queueAudio('/a.mp3');
+      expect(context().sources).toHaveLength(1);
+      expect(context().panners).toHaveLength(0);
+      expect(() => queue.setChannelPan(0, -1)).not.toThrow();
+    });
+
+    test('released items disconnect their panner', async () => {
+      const queue = setup({ webAudio: 'auto' });
+      queue.setChannelPan(0, 1);
+      await queue.queueAudio('/a.mp3');
+      await queue.stopAllAudioInChannel(0);
+      expect(context().panners[0]?.disconnect).toHaveBeenCalled();
+    });
+
+    test('positions are clamped; non-numbers and bad channels are rejected', () => {
+      const queue = setup();
+      expect(queue.getChannelPan()).toBe(0);
+      expect(queue.getChannelPan(9)).toBe(0);
+      queue.setChannelPan(0, 3);
+      expect(queue.getChannelPan(0)).toBe(1);
+      queue.setChannelPan(0, -3);
+      expect(queue.getChannelPan(0)).toBe(-1);
+      expect(() => queue.setChannelPan(0, Number.NaN)).toThrow(RangeError);
+      expect(() => queue.setChannelPan(-1, 0)).toThrow(RangeError);
+    });
+  });
+
   test('force mode routes through one shared context and controls gain, not element volume', async () => {
     const queue = setup({ webAudio: 'force' });
     await queue.queueAudio('/a.mp3', 0);

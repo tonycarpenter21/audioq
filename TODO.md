@@ -15,14 +15,13 @@ Done in 3.0:
 - Caching / offline: `preloadAudio`, `isAudioPreloaded`, `releasePreloadedAudio`
 - UI framework state: `createChannelStore` (React `useSyncExternalStore`, Svelte, Vue, Solid)
 - Muting that keeps volumes: `setMuted`, `setChannelMuted`
+- Stereo panning: `setChannelPan`
 
 Not planned as APIs (a timer does it; recipes are in the README):
 - Sleep timer
 - Scheduled playback at a predetermined time
 
 Potential New Package Features:
-- Stereo panning per channel (`StereoPannerNode`; needs Web Audio routing, so same-origin, CORS or
-  preloaded files only)
 - Sample-accurate gapless playback. Needs decoding whole files into Web Audio buffers (memory
   heavy; specialist libraries like gapless-5 do this). `setCrossfade(channel, 50)` hides the
   small gap between items for most music.

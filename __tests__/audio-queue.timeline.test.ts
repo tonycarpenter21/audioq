@@ -69,7 +69,9 @@ describe('segments (endAt)', () => {
     await flush();
     expect(audioAt(0).currentTime).toBe(1);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0]?.[0])).toMatch(/sprite\.mp3 did not start at 1000 ms.*Range/);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(
+      /sprite\.mp3 did not start at 1000 ms: no HTTP Range support/
+    );
   });
 
   test('a startAt seek that worked logs nothing', async () => {

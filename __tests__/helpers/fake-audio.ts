@@ -219,6 +219,7 @@ export class FakeAudioNode {
   connect: jest.Mock = jest.fn();
   disconnect: jest.Mock = jest.fn();
   gain: FakeAudioParam = new FakeAudioParam();
+  pan: FakeAudioParam = Object.assign(new FakeAudioParam(), { value: 0 });
 }
 
 /** Fake AudioContext. */
@@ -230,6 +231,9 @@ export class FakeAudioContext {
   destination: object = {};
   sources: FakeAudioNode[] = [];
   gains: FakeAudioNode[] = [];
+  panners: FakeAudioNode[] = [];
+  /** Set to false to imitate a browser without StereoPannerNode (Safari before 14.1). */
+  static hasStereoPanner: boolean = true;
   state: 'suspended' | 'running' | 'closed' = 'suspended';
   close: jest.Mock = jest.fn(async () => {
     this.state = 'closed';
@@ -245,6 +249,7 @@ export class FakeAudioContext {
   static reset(): void {
     FakeAudioContext.instances = [];
     FakeAudioContext.failSourceCreation = false;
+    FakeAudioContext.hasStereoPanner = true;
   }
 
   createMediaElementSource(_element: unknown): FakeAudioNode {
@@ -258,6 +263,15 @@ export class FakeAudioContext {
     const node = new FakeAudioNode();
     this.gains.push(node);
     return node;
+  }
+
+  get createStereoPanner(): (() => FakeAudioNode) | undefined {
+    if (!FakeAudioContext.hasStereoPanner) return undefined;
+    return (): FakeAudioNode => {
+      const node = new FakeAudioNode();
+      this.panners.push(node);
+      return node;
+    };
   }
 }
 

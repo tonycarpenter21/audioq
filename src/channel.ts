@@ -120,6 +120,8 @@ export class Channel {
   /** Whether the channel is paused. */
   paused: boolean = false;
   /** A pauseWithFade is fading out; the channel pauses when it finishes. */
+  /** Stereo position (-1 left to 1 right); needs Web Audio routing. */
+  pan: number = 0;
   pendingPause: boolean = false;
   /** Channel playback speed (multiplied with each item's rate). */
   playbackRate: number = 1;

@@ -20,7 +20,7 @@ export const validationConfig = {
     cjsGzipBytes: 20 * 1024,
     esmGzipBytes: 20 * 1024,
     minifiedFullGzipBytes: 13 * 1024,
-    minifiedQueueAudioOnlyGzipBytes: 9.5 * 1024
+    minifiedQueueAudioOnlyGzipBytes: 10 * 1024
   },
 
   /** What the published tarball may contain. */

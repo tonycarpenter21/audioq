@@ -290,6 +290,16 @@ setChannelMuted(0, true); // just the music
 console.log(isChannelMuted(0));
 ```
 
+### Stereo panning
+
+```ts
+setChannelPan(1, -0.8); // footsteps on the left (-1 left, 0 center, 1 right)
+console.log(getChannelPan(1));
+```
+
+Panning routes the channel through Web Audio, so it works for same-origin, preloaded or CORS
+(`crossOrigin: 'anonymous'`) audio. Other audio plays centered, with a warning.
+
 ### Ducking
 
 Lower every other channel while a priority channel (for example voice) has audio queued. Channels

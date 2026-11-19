@@ -118,6 +118,8 @@ describe('top-level functions', () => {
     api.setChannelMuted(0, true);
     expect(api.isChannelMuted(0)).toBe(true);
     api.setChannelMuted(0, false);
+    api.setChannelPan(0, 0);
+    expect(api.getChannelPan(0)).toBe(0);
     api.setVolumeDucking({ duckingVolume: 0.2, priorityChannel: 1, priorityVolume: 1 });
     api.clearVolumeDucking();
     api.unlockAudio();

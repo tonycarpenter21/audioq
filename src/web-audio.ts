@@ -11,6 +11,8 @@ type AudioContextConstructor = new () => AudioContext;
 export interface GainRoute {
   /** Gain node controlling the element's output volume. */
   gain: GainNode;
+  /** Stereo panner, when the browser has StereoPannerNode (Safari 14.1+, all others). */
+  panner: StereoPannerNode | undefined;
   /** Source node wrapping the element. */
   source: MediaElementAudioSourceNode;
 }
@@ -83,9 +85,14 @@ export class WebAudioEngine {
    * the element keeps playing through its normal output.
    * @param element - Element to route
    * @param initialGain - Starting gain (0-1)
+   * @param initialPan - Starting stereo position (-1 left to 1 right)
    * @returns The route, or undefined
    */
-  connect(element: HTMLAudioElement, initialGain: number): GainRoute | undefined {
+  connect(
+    element: HTMLAudioElement,
+    initialGain: number,
+    initialPan: number = 0
+  ): GainRoute | undefined {
     const context = this.getContext();
     if (!context) return undefined;
     try {
@@ -93,9 +100,17 @@ export class WebAudioEngine {
       const gain = context.createGain();
       gain.gain.value = initialGain;
       source.connect(gain);
-      gain.connect(context.destination);
+      const panner =
+        typeof context.createStereoPanner === 'function' ? context.createStereoPanner() : undefined;
+      if (panner) {
+        panner.pan.value = initialPan;
+        gain.connect(panner);
+        panner.connect(context.destination);
+      } else {
+        gain.connect(context.destination);
+      }
       this.resume();
-      return { gain, source };
+      return { gain, panner, source };
     } catch {
       return undefined;
     }
@@ -115,6 +130,15 @@ export class WebAudioEngine {
   }
 
   /**
+   * Sets a route's stereo position. Ignored where StereoPannerNode is missing.
+   * @param route - Route to change
+   * @param value - Position (-1 left to 1 right)
+   */
+  setPan(route: GainRoute, value: number): void {
+    if (route.panner) route.panner.pan.value = value;
+  }
+
+  /**
    * Disconnects a route so its nodes can be garbage collected.
    * @param route - Route to disconnect
    */
@@ -122,6 +146,7 @@ export class WebAudioEngine {
     try {
       route.source.disconnect();
       route.gain.disconnect();
+      route.panner?.disconnect();
     } catch {
       // Already disconnected.
     }

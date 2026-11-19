@@ -61,7 +61,7 @@ import {
   secondsToMs,
   settleWithin
 } from './utils.js';
-import { WebAudioEngine, shouldUseWebAudio } from './web-audio.js';
+import { WebAudioEngine, isWebAudioSupported, shouldUseWebAudio } from './web-audio.js';
 
 /** Events emitted by a queue, with their payloads. */
 export interface QueueEvents {
@@ -428,14 +428,38 @@ export class QueueEngine {
     return element;
   }
 
+  /**
+   * Routes an element through Web Audio when needed: always in 'force' mode or on iOS, and
+   * elsewhere when its channel is panned (panning needs a StereoPannerNode).
+   */
   protected routeThroughWebAudio(channel: Channel, item: Item, element: HTMLAudioElement): void {
-    if (!shouldUseWebAudio(this.config.webAudio)) return;
+    const mode = this.config.webAudio;
+    const forPan = channel.pan !== 0 && mode !== 'off' && isWebAudioSupported();
+    if (item.route || !(shouldUseWebAudio(mode) || forPan)) return;
     const pageUrl = typeof location === 'undefined' ? undefined : location.href;
     // Cross-origin media without CORS plays as silence through Web Audio, so only route sources
-    // that are same-origin or explicitly loaded with CORS.
+    // that are same-origin, preloaded, or explicitly loaded with CORS.
     const elementSource = item.objectUrl ?? item.src;
-    if (item.crossOrigin === undefined && !isSameOriginSource(elementSource, pageUrl)) return;
-    item.route = this.webAudio.connect(element, channel.effectiveGain(this.masterGain()));
+    if (item.crossOrigin === undefined && !isSameOriginSource(elementSource, pageUrl)) {
+      if (forPan) {
+        this.config.logger?.warn(`audioq: cannot pan ${item.fileName}: cross-origin without CORS`);
+      }
+      return;
+    }
+    const gain = channel.effectiveGain(this.masterGain());
+    item.route = this.webAudio.connect(element, gain, channel.pan);
+    // Routed audio is controlled by the gain node; the element itself plays at full volume.
+    if (item.route) element.volume = 1;
+  }
+
+  /** Applies a channel's pan to its items, routing an already-playing item if needed. */
+  protected applyPan(channel: Channel): void {
+    for (const item of [channel.head, channel.outgoing]) {
+      if (!item?.element) continue;
+      this.routeThroughWebAudio(channel, item, item.element);
+      if (item.route) this.webAudio.setPan(item.route, channel.pan);
+    }
+    this.applyGain(channel);
   }
 
   protected play(channel: Channel, item: Item): Promise<void> {
@@ -953,8 +977,7 @@ export class QueueEngine {
     if (!element || item.startAt <= 0) return;
     if (Math.abs(element.currentTime * 1000 - item.startAt) <= START_TOLERANCE_MS) return;
     this.config.logger?.warn(
-      `audioq: ${item.fileName} did not start at ${String(item.startAt)} ms (startAt). ` +
-        'The server may not support HTTP Range requests, which seeking needs.'
+      `audioq: ${item.fileName} did not start at ${String(item.startAt)} ms: no HTTP Range support?`
     );
     try {
       element.currentTime = item.startAt / 1000;

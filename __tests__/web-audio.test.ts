@@ -155,6 +155,16 @@ describe('WebAudioEngine', () => {
     ).toHaveBeenCalled();
   });
 
+  test('setPan moves the panner, and is ignored without one', () => {
+    const engine = new WebAudioEngine();
+    const route = engine.connect(element(), 1, -0.5);
+    if (!route?.panner) throw new Error('expected a route with a panner');
+    expect(route.panner.pan.value).toBe(-0.5);
+    engine.setPan(route, 0.75);
+    expect(route.panner.pan.value).toBe(0.75);
+    expect(() => engine.setPan({ ...route, panner: undefined }, 1)).not.toThrow();
+  });
+
   test('disconnect detaches both nodes and tolerates repeated calls', () => {
     const engine = new WebAudioEngine();
     const route = engine.connect(element(), 1);

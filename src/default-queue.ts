@@ -540,6 +540,30 @@ export const getChannelGap = (channelNumber?: number): number =>
   getDefaultAudioQueue().getChannelGap(channelNumber);
 
 /**
+ * Places a channel in the stereo field, from -1 (left) through 0 (center) to 1 (right). Panning
+ * routes the channel's audio through Web Audio, so it works for same-origin, preloaded or
+ * CORS-enabled (`crossOrigin: 'anonymous'`) audio; other audio plays centered, with a warning.
+ * Ignored when `webAudio` is `'off'` and in browsers without StereoPannerNode (Safari before
+ * 14.1).
+ * @param channelNumber - Channel
+ * @param pan - Position (-1 to 1; values outside are clamped)
+ * @example
+ * ```ts
+ * setChannelPan(1, -0.8); // footsteps on the left
+ * ```
+ */
+export const setChannelPan = (channelNumber: number, pan: number): void =>
+  getDefaultAudioQueue().setChannelPan(channelNumber, pan);
+
+/**
+ * Reads a channel's stereo position.
+ * @param channelNumber - Channel (defaults to 0)
+ * @returns Position from -1 (left) to 1 (right); 0 is center
+ */
+export const getChannelPan = (channelNumber?: number): number =>
+  getDefaultAudioQueue().getChannelPan(channelNumber);
+
+/**
  * Overlaps consecutive items: near the end of each item the next one starts and fades in while
  * the current one fades out. Limited to half of an item's length; ignored for looping items and
  * with repeat mode `'one'`.
