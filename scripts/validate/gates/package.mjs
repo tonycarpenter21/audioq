@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { build } from 'esbuild';
 import { API_SNAPSHOT_PATH, readPublicApi } from '../api.mjs';
 import { validationConfig } from '../config.mjs';
 import {
@@ -213,25 +214,55 @@ export const packageGates = [
   {
     category: 'package',
     dependsOn: ['build'],
-    description: 'Gzipped size of each built format stays within the budget in config.mjs.',
+    description:
+      'Gzipped size of each built format, and the minified + gzipped size an app ships (whole ' +
+      'package, and queueAudio alone), stay within the budgets in config.mjs.',
     id: 'bundle-size',
     run: async () => {
-      const { cjsGzipBytes, esmGzipBytes } = validationConfig.bundle;
+      const budget = validationConfig.bundle;
       const measure = (folder) =>
         gzipSync(
           Buffer.concat(
             listFiles(`dist/${folder}`, (p) => p.endsWith('.js')).map((p) => readFileSync(abs(p)))
-          )
+          ),
+          { level: 9 }
         ).length;
-      const esm = measure('esm');
-      const cjs = measure('cjs');
+      const minified = async (contents) => {
+        const result = await build({
+          bundle: true,
+          format: 'esm',
+          logLevel: 'silent',
+          minify: true,
+          stdin: { contents, resolveDir: abs('.') },
+          write: false
+        });
+        return gzipSync(result.outputFiles[0].contents, { level: 9 }).length;
+      };
+      const entry = JSON.stringify(abs('dist/esm/index.js'));
+      const sizes = {
+        cjs: measure('cjs'),
+        esm: measure('esm'),
+        minifiedFull: await minified(`export * from ${entry};`),
+        minifiedQueueAudioOnly: await minified(
+          `import { queueAudio } from ${entry}; queueAudio('/a.mp3');`
+        )
+      };
       const kb = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
-      const problems = [];
-      if (esm > esmGzipBytes) problems.push(`ESM ${kb(esm)} gzipped > budget ${kb(esmGzipBytes)}`);
-      if (cjs > cjsGzipBytes) problems.push(`CJS ${kb(cjs)} gzipped > budget ${kb(cjsGzipBytes)}`);
+      const limits = {
+        cjs: budget.cjsGzipBytes,
+        esm: budget.esmGzipBytes,
+        minifiedFull: budget.minifiedFullGzipBytes,
+        minifiedQueueAudioOnly: budget.minifiedQueueAudioOnlyGzipBytes
+      };
+      const problems = Object.entries(sizes)
+        .filter(([key, bytes]) => bytes > limits[key])
+        .map(([key, bytes]) => `${key}: ${kb(bytes)} > budget ${kb(limits[key])}`);
+      const summary =
+        `min+gz ${kb(sizes.minifiedFull)} (queueAudio only ${kb(sizes.minifiedQueueAudioOnly)}), ` +
+        `dist gz ESM ${kb(sizes.esm)} / CJS ${kb(sizes.cjs)}`;
       return problems.length === 0
-        ? pass(`ESM ${kb(esm)} / CJS ${kb(cjs)} gzipped (budget ${kb(esmGzipBytes)})`)
-        : fail('Bundle over budget', problems);
+        ? pass(summary, { output: JSON.stringify(sizes, null, 2) })
+        : fail('Bundle over budget', problems, { output: JSON.stringify(sizes, null, 2) });
     },
     title: 'Bundle size budget'
   },

@@ -71,6 +71,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "husky": "^9.1.7",
     "jest": "^30.5.2",

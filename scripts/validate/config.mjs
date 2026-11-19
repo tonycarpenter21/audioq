@@ -15,8 +15,17 @@ export const validationConfig = {
     maxTestFileLines: 1500
   },
 
-  /** Gzipped size budgets for the built output, in bytes. */
-  bundle: { cjsGzipBytes: 12 * 1024, esmGzipBytes: 12 * 1024 },
+  /**
+   * Size budgets in bytes. `*GzipBytes` measure the unminified dist output; `minified*` measure
+   * what an app ships after its bundler minifies (esbuild --minify, then gzip): the whole package,
+   * and an app that only imports queueAudio.
+   */
+  bundle: {
+    cjsGzipBytes: 12 * 1024,
+    esmGzipBytes: 12 * 1024,
+    minifiedFullGzipBytes: 9 * 1024,
+    minifiedQueueAudioOnlyGzipBytes: 8 * 1024
+  },
 
   /** What the published tarball may contain. */
   packageContents: {
