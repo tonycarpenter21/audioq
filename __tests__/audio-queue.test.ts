@@ -1120,6 +1120,65 @@ describe('volume ducking', () => {
 describe('Web Audio routing', () => {
   beforeEach(() => installFakeAudioContext());
 
+  describe('channel analyser', () => {
+    const context = (): FakeAudioContext => FakeAudioContext.instances[0] as FakeAudioContext;
+
+    test('routes the channel through one analyser that plays into the speakers', async () => {
+      const queue = setup({ webAudio: 'auto' });
+      const analyser = queue.getChannelAnalyser(0);
+      expect(analyser).toBe(context().analysers[0]);
+      expect(context().analysers[0]?.connect).toHaveBeenCalledWith(context().destination);
+      await queue.queueAudio('/a.mp3');
+      expect(context().panners[0]?.connect).toHaveBeenCalledWith(analyser);
+      expect(queue.getChannelAnalyser(0)).toBe(analyser);
+      expect(context().analysers).toHaveLength(1);
+    });
+
+    test('a playing item is routed into the analyser when it is requested', async () => {
+      const queue = setup({ webAudio: 'auto' });
+      await queue.queueAudio('/a.mp3');
+      await flush();
+      expect(FakeAudioContext.instances).toHaveLength(0);
+      const analyser = queue.getChannelAnalyser(0);
+      expect(context().sources).toHaveLength(1);
+      expect(context().panners[0]?.connect).toHaveBeenCalledWith(analyser);
+    });
+
+    test('an already-routed item is moved from the speakers to the analyser', async () => {
+      const queue = setup({ webAudio: 'force' });
+      await queue.queueAudio('/a.mp3');
+      const panner = context().panners[0];
+      expect(panner?.connect).toHaveBeenCalledWith(context().destination);
+      const analyser = queue.getChannelAnalyser(0);
+      expect(panner?.disconnect).toHaveBeenCalled();
+      expect(panner?.connect).toHaveBeenLastCalledWith(analyser);
+    });
+
+    test('each channel has its own analyser; destroying the channel disconnects it', async () => {
+      const queue = setup({ webAudio: 'auto' });
+      const first = queue.getChannelAnalyser(0);
+      const second = queue.getChannelAnalyser(1);
+      expect(first).not.toBe(second);
+      await queue.destroyChannel(0);
+      expect(context().analysers[0]?.disconnect).toHaveBeenCalled();
+    });
+
+    test("undefined with webAudio 'off' or without Web Audio", () => {
+      expect(setup({ webAudio: 'off' }).getChannelAnalyser(0)).toBeUndefined();
+      removeAudioContext();
+      expect(setup({ webAudio: 'auto' }).getChannelAnalyser(0)).toBeUndefined();
+    });
+
+    test('cross-origin audio without CORS is not routed, with a warning', async () => {
+      const warn = jest.fn();
+      const queue = setup({ logger: { error: jest.fn(), warn }, webAudio: 'auto' });
+      queue.getChannelAnalyser(0);
+      await queue.queueAudio('https://cdn.other.com/a.mp3');
+      expect(context().sources).toHaveLength(0);
+      expect(String(callArg(warn))).toMatch(/cannot pan or analyse a\.mp3/);
+    });
+  });
+
   describe('stereo panning', () => {
     const context = (): FakeAudioContext => FakeAudioContext.instances[0] as FakeAudioContext;
 
@@ -1166,7 +1225,9 @@ describe('Web Audio routing', () => {
       queue.setChannelPan(0, -1);
       await queue.queueAudio('https://cdn.other.com/a.mp3');
       expect(FakeAudioContext.instances[0]?.sources ?? []).toHaveLength(0);
-      expect(String(callArg(warn))).toMatch(/cannot pan a\.mp3: cross-origin without CORS/);
+      expect(String(callArg(warn))).toMatch(
+        /cannot pan or analyse a\.mp3: cross-origin without CORS/
+      );
       await queue.queueAudio('https://cdn.other.com/b.mp3', 1, { crossOrigin: 'anonymous' });
       queue.setChannelPan(1, 1);
       expect(context().panners[0]?.pan.value).toBe(1);

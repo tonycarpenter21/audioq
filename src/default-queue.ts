@@ -564,6 +564,29 @@ export const getChannelPan = (channelNumber?: number): number =>
   getDefaultAudioQueue().getChannelPan(channelNumber);
 
 /**
+ * An AnalyserNode measuring what a channel plays (after volume, fades and panning), for
+ * visualizers and level meters. Read it with the standard Web Audio methods
+ * (`getByteFrequencyData`, `getByteTimeDomainData`) and tune it with `fftSize` and
+ * `smoothingTimeConstant`. Calling it routes the channel through Web Audio, so it measures
+ * same-origin, preloaded or CORS (`crossOrigin: 'anonymous'`) audio; other audio plays but reads
+ * as silence. Returns the same node on every call.
+ * @param channelNumber - Channel
+ * @returns The analyser, or undefined when `webAudio` is `'off'` or Web Audio is unavailable
+ * @example
+ * ```ts
+ * const analyser = getChannelAnalyser(0);
+ * const bins = new Uint8Array(analyser?.frequencyBinCount ?? 0);
+ * const draw = (): void => {
+ *   analyser?.getByteFrequencyData(bins); // 0-255 per frequency band
+ *   requestAnimationFrame(draw);
+ * };
+ * draw();
+ * ```
+ */
+export const getChannelAnalyser = (channelNumber: number): AnalyserNode | undefined =>
+  getDefaultAudioQueue().getChannelAnalyser(channelNumber);
+
+/**
  * Overlaps consecutive items: near the end of each item the next one starts and fades in while
  * the current one fades out. Limited to half of an item's length; ignored for looping items and
  * with repeat mode `'one'`.

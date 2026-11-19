@@ -434,30 +434,38 @@ export class QueueEngine {
    */
   protected routeThroughWebAudio(channel: Channel, item: Item, element: HTMLAudioElement): void {
     const mode = this.config.webAudio;
-    const forPan = channel.pan !== 0 && mode !== 'off' && isWebAudioSupported();
-    if (item.route || !(shouldUseWebAudio(mode) || forPan)) return;
+    const wanted = channel.pan !== 0 || channel.analyser !== undefined;
+    const forFeature = wanted && mode !== 'off' && isWebAudioSupported();
+    if (item.route || !(shouldUseWebAudio(mode) || forFeature)) return;
     const pageUrl = typeof location === 'undefined' ? undefined : location.href;
     // Cross-origin media without CORS plays as silence through Web Audio, so only route sources
     // that are same-origin, preloaded, or explicitly loaded with CORS.
     const elementSource = item.objectUrl ?? item.src;
     if (item.crossOrigin === undefined && !isSameOriginSource(elementSource, pageUrl)) {
-      if (forPan) {
-        this.config.logger?.warn(`audioq: cannot pan ${item.fileName}: cross-origin without CORS`);
+      if (forFeature) {
+        this.config.logger?.warn(
+          `audioq: cannot pan or analyse ${item.fileName}: cross-origin without CORS`
+        );
       }
       return;
     }
     const gain = channel.effectiveGain(this.masterGain());
-    item.route = this.webAudio.connect(element, gain, channel.pan);
+    item.route = this.webAudio.connect(element, gain, channel.pan, channel.analyser);
     // Routed audio is controlled by the gain node; the element itself plays at full volume.
     if (item.route) element.volume = 1;
   }
 
-  /** Applies a channel's pan to its items, routing an already-playing item if needed. */
-  protected applyPan(channel: Channel): void {
+  /**
+   * Applies a channel's pan and analyser to its playing items, routing them through Web Audio
+   * first if needed.
+   */
+  protected applyWebAudio(channel: Channel): void {
     for (const item of [channel.head, channel.outgoing]) {
       if (!item?.element) continue;
       this.routeThroughWebAudio(channel, item, item.element);
-      if (item.route) this.webAudio.setPan(item.route, channel.pan);
+      if (!item.route) continue;
+      this.webAudio.setPan(item.route, channel.pan);
+      if (channel.analyser) this.webAudio.setOutput(item.route, channel.analyser);
     }
     this.applyGain(channel);
   }
@@ -1073,6 +1081,7 @@ export class QueueEngine {
     if (channel) {
       this.clearChannel(channel);
       channel.cancelTweens();
+      channel.analyser?.disconnect();
       this.channels.delete(channelNumber);
     }
     this.emitter.clearChannel(channelNumber);

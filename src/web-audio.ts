@@ -86,12 +86,14 @@ export class WebAudioEngine {
    * @param element - Element to route
    * @param initialGain - Starting gain (0-1)
    * @param initialPan - Starting stereo position (-1 left to 1 right)
+   * @param output - Node the route plays into (the speakers by default; a channel's analyser)
    * @returns The route, or undefined
    */
   connect(
     element: HTMLAudioElement,
     initialGain: number,
-    initialPan: number = 0
+    initialPan: number = 0,
+    output?: AudioNode
   ): GainRoute | undefined {
     const context = this.getContext();
     if (!context) return undefined;
@@ -105,10 +107,8 @@ export class WebAudioEngine {
       if (panner) {
         panner.pan.value = initialPan;
         gain.connect(panner);
-        panner.connect(context.destination);
-      } else {
-        gain.connect(context.destination);
       }
+      (panner ?? gain).connect(output ?? context.destination);
       this.resume();
       return { gain, panner, source };
     } catch {
@@ -127,6 +127,39 @@ export class WebAudioEngine {
       param.cancelScheduledValues(this.context.currentTime);
     }
     param.value = value;
+  }
+
+  /**
+   * Creates an analyser on the shared context, playing into the speakers. Routes connected to it
+   * (see {@link setOutput}) can then be measured.
+   * @returns The analyser, or undefined without Web Audio
+   */
+  createAnalyser(): AnalyserNode | undefined {
+    const context = this.getContext();
+    if (!context) return undefined;
+    try {
+      const analyser = context.createAnalyser();
+      analyser.connect(context.destination);
+      return analyser;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Sends a route into another node (for example a channel's analyser) instead of its current
+   * output.
+   * @param route - Route to change
+   * @param output - Node to play into
+   */
+  setOutput(route: GainRoute, output: AudioNode): void {
+    const last = route.panner ?? route.gain;
+    try {
+      last.disconnect();
+      last.connect(output);
+    } catch {
+      // A node from a closed context; the route is being released.
+    }
   }
 
   /**

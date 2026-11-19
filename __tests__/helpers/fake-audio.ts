@@ -232,6 +232,7 @@ export class FakeAudioContext {
   sources: FakeAudioNode[] = [];
   gains: FakeAudioNode[] = [];
   panners: FakeAudioNode[] = [];
+  analysers: FakeAudioNode[] = [];
   /** Set to false to imitate a browser without StereoPannerNode (Safari before 14.1). */
   static hasStereoPanner: boolean = true;
   state: 'suspended' | 'running' | 'closed' = 'suspended';
@@ -262,6 +263,12 @@ export class FakeAudioContext {
   createGain(): FakeAudioNode {
     const node = new FakeAudioNode();
     this.gains.push(node);
+    return node;
+  }
+
+  createAnalyser(): FakeAudioNode {
+    const node = new FakeAudioNode();
+    this.analysers.push(node);
     return node;
   }
 

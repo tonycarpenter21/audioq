@@ -153,6 +153,37 @@ describe('WebAudioEngine', () => {
     ).toHaveBeenCalled();
   });
 
+  test('createAnalyser plays into the speakers; undefined without Web Audio', () => {
+    const engine = new WebAudioEngine();
+    const analyser = engine.createAnalyser();
+    const context = FakeAudioContext.instances[0];
+    expect(analyser).toBe(context?.analysers[0]);
+    expect(context?.analysers[0]?.connect).toHaveBeenCalledWith(context?.destination);
+    removeAudioContext();
+    expect(new WebAudioEngine().createAnalyser()).toBeUndefined();
+  });
+
+  test('connect plays into a given output instead of the speakers', () => {
+    const engine = new WebAudioEngine();
+    const analyser = engine.createAnalyser();
+    const route = engine.connect(element(), 1, 0, analyser);
+    expect(route?.panner?.connect).toHaveBeenCalledWith(analyser);
+  });
+
+  test('setOutput moves a route to another node and tolerates closed nodes', () => {
+    const engine = new WebAudioEngine();
+    const route = engine.connect(element(), 1);
+    const analyser = engine.createAnalyser();
+    if (!route?.panner || !analyser) throw new Error('expected a route and an analyser');
+    engine.setOutput(route, analyser);
+    expect(route.panner.disconnect).toHaveBeenCalled();
+    expect(route.panner.connect).toHaveBeenLastCalledWith(analyser);
+    (route.panner.disconnect as jest.Mock).mockImplementation(() => {
+      throw new Error('InvalidAccessError');
+    });
+    expect(() => engine.setOutput(route, analyser)).not.toThrow();
+  });
+
   test('setPan moves the panner, and is ignored without one', () => {
     const engine = new WebAudioEngine();
     const route = engine.connect(element(), 1, -0.5);

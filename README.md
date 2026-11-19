@@ -300,6 +300,23 @@ console.log(getChannelPan(1));
 Panning routes the channel through Web Audio, so it works for same-origin, preloaded or CORS
 (`crossOrigin: 'anonymous'`) audio. Other audio plays centered, with a warning.
 
+### Visualizers
+
+`getChannelAnalyser(channel)` returns the browser's own `AnalyserNode` for a channel, measuring
+what it plays (after volume, fades and panning):
+
+```ts
+const analyser = getChannelAnalyser(0);
+const bins = new Uint8Array(analyser?.frequencyBinCount ?? 0);
+const draw = (): void => {
+  analyser?.getByteFrequencyData(bins); // 0-255 per frequency band; draw bars from it
+  requestAnimationFrame(draw);
+};
+draw();
+```
+
+Like panning it uses Web Audio, so it measures same-origin, preloaded or CORS audio.
+
 ### Ducking
 
 Lower every other channel while a priority channel (for example voice) has audio queued. Channels

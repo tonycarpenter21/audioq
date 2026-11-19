@@ -831,7 +831,7 @@ export class AudioQueue extends QueueEngine {
     if (!Number.isFinite(pan)) throw new RangeError('pan must be a number from -1 to 1');
     const channel = this.channel(channelNumber);
     channel.pan = Math.min(1, Math.max(-1, pan));
-    this.applyPan(channel);
+    this.applyWebAudio(channel);
   }
 
   /**
@@ -841,6 +841,37 @@ export class AudioQueue extends QueueEngine {
    */
   getChannelPan(channelNumber: number = 0): number {
     return this.existing(channelNumber)?.pan ?? 0;
+  }
+
+  /**
+   * An AnalyserNode measuring what a channel plays (after volume, fades and panning), for
+   * visualizers and level meters. Read it with the standard Web Audio methods
+   * (`getByteFrequencyData`, `getByteTimeDomainData`) and tune it with `fftSize` and
+   * `smoothingTimeConstant`. Calling it routes the channel through Web Audio, so it measures
+   * same-origin, preloaded or CORS (`crossOrigin: 'anonymous'`) audio; other audio plays but reads
+   * as silence. Returns the same node on every call.
+   * @param channelNumber - Channel
+   * @returns The analyser, or undefined when `webAudio` is `'off'` or Web Audio is unavailable
+   * @example
+   * ```ts
+   * const analyser = getChannelAnalyser(0);
+   * const bins = new Uint8Array(analyser?.frequencyBinCount ?? 0);
+   * const draw = (): void => {
+   *   analyser?.getByteFrequencyData(bins); // 0-255 per frequency band
+   *   requestAnimationFrame(draw);
+   * };
+   * draw();
+   * ```
+   */
+  getChannelAnalyser(channelNumber: number): AnalyserNode | undefined {
+    if (this.config.webAudio === 'off') return undefined;
+    const channel = this.channel(channelNumber);
+    if (!channel.analyser) {
+      channel.analyser = this.webAudio.createAnalyser();
+      if (!channel.analyser) return undefined;
+      this.applyWebAudio(channel);
+    }
+    return channel.analyser;
   }
 
   /**

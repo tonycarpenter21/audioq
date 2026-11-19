@@ -120,6 +120,8 @@ export class Channel {
   /** Whether the channel is paused. */
   paused: boolean = false;
   /** A pauseWithFade is fading out; the channel pauses when it finishes. */
+  /** Analyser every item of the channel plays through, once getChannelAnalyser was called. */
+  analyser: AnalyserNode | undefined = undefined;
   /** Stereo position (-1 left to 1 right); needs Web Audio routing. */
   pan: number = 0;
   pendingPause: boolean = false;

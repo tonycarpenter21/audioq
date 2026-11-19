@@ -16,6 +16,7 @@ Done in 3.0:
 - UI framework state: `createChannelStore` (React `useSyncExternalStore`, Svelte, Vue, Solid)
 - Muting that keeps volumes: `setMuted`, `setChannelMuted`
 - Stereo panning: `setChannelPan`
+- Visualizer data: `getChannelAnalyser`
 
 Not planned as APIs (a timer does it; recipes are in the README):
 - Sleep timer
