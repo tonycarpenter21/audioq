@@ -91,8 +91,10 @@ loaded. Nothing changes for you unless you relied on every file downloading imme
 - `unlockAudio()` to start blocked audio from your own click handler.
 - Config options `loadTimeoutMs`, `prefetchCount`, `logger`, `maxChannels`, `webAudio`,
   `historySize`, `pauseWhenHidden`.
-- Item options `crossOrigin`, `metadata`, `interrupt`, `dedupeMs`, `playbackRate`, `startAt`.
+- Item options `crossOrigin`, `metadata`, `interrupt`, `dedupeMs`, `playbackRate`, `startAt`, `endAt`, `cues`.
 - `Blob`/`File` sources, `seekTo`, `seekBy`, `setPlaybackRate`, `setRepeatMode`, `shuffleQueue`,
-  `setChannelGap`, `getHistory`, and `connectMediaSession` for lock-screen controls.
+  `setChannelGap`, `setCrossfade`, `getHistory`, and `connectMediaSession` for lock-screen controls.
+- Segments and sprites (`endAt`, `defineSprite`), and timed cues for captions and lip-sync
+  (`cues`, `onAudioCue`, `parseWebVtt`).
 - Importing the package has no side effects (safe for SSR), and the package ships both ES modules
   and CommonJS.

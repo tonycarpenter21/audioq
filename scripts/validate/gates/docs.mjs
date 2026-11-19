@@ -18,22 +18,25 @@ const codeBlocks = (markdown) => {
   const blocks = [];
   for (let i = 0; i < lines.length; i++) {
     // Any TypeScript fence counts, including ones with an info string (```ts title="x").
-    const open = lines[i].match(/^```(ts|typescript|tsx)(\s.*)?$/);
+    // tsx (React) examples are not checked: React's types are not a dependency here.
+    const open = lines[i].match(/^```(ts|typescript)(\s.*)?$/);
     if (!open) continue;
+    // ```ts signature blocks document a function's shape; they are not runnable examples.
+    const isSignature = /\bsignature\b/.test(open[2] ?? '');
     const skip =
       /<!--\s*validate:skip\s*-->/.test(lines[i - 1] ?? '') ||
       /<!--\s*validate:skip\s*-->/.test(lines[i - 2] ?? '');
     const start = i + 1;
     let end = start;
     while (end < lines.length && !lines[end].startsWith('```')) end++;
-    if (!skip) blocks.push({ code: lines.slice(start, end), line: start + 1 });
+    if (!skip && !isSignature) blocks.push({ code: lines.slice(start, end), line: start + 1 });
     i = end;
   }
   return blocks;
 };
 
-/** Typechecks code blocks against src/index.ts, imported as 'audioq'. */
-const typecheckExamples = (documentPath) => {
+/** Typechecks a Markdown file's ts code blocks against src/index.ts, imported as 'audioq'. */
+export const typecheckExamples = (documentPath) => {
   const api = readPublicApi();
   const names = Object.keys(api);
   const files = new Map();
