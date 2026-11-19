@@ -20,7 +20,21 @@ const commonRules = {
   '@typescript-eslint/ban-ts-comment': 'error',
   '@typescript-eslint/no-unnecessary-type-assertion': 'error',
   '@typescript-eslint/no-floating-promises': 'error',
-  '@typescript-eslint/await-thenable': 'error'
+  '@typescript-eslint/await-thenable': 'error',
+  // Type-aware rules that catch real bugs
+  '@typescript-eslint/no-misused-promises': 'error',
+  '@typescript-eslint/only-throw-error': 'error',
+  '@typescript-eslint/prefer-promise-reject-errors': 'error',
+  '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+  '@typescript-eslint/return-await': ['error', 'in-try-catch'],
+  '@typescript-eslint/switch-exhaustiveness-check': 'error',
+  '@typescript-eslint/use-unknown-in-catch-callback-variable': 'error',
+  '@typescript-eslint/no-unnecessary-condition': 'error',
+  '@typescript-eslint/prefer-readonly': 'error',
+  // A catch block must handle the error or explain (in a comment) why it is ignored
+  'no-empty': ['error', { allowEmptyCatch: false }],
+  'no-fallthrough': 'error',
+  'no-unreachable': 'error'
 };
 
 export default [
@@ -79,8 +93,10 @@ export default [
     }
   },
   {
-    files: ['jest.config.js'],
-    languageOptions: { sourceType: 'commonjs' }
+    // Jest config files are CommonJS.
+    files: ['jest.config.js', 'jest.dist.config.js'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
   },
   {
     ignores: ['dist/', 'node_modules/', 'coverage/', '.validation-reports/']

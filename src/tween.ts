@@ -46,7 +46,9 @@ export interface TweenOptions {
  */
 export const startTween = (options: TweenOptions): Tween => {
   const { duration, from, onUpdate, to } = options;
-  const ease = EASINGS[options.easing] ?? EASINGS[EasingType.Linear];
+  // Plain-JavaScript callers can pass any string, so the lookup may miss.
+  const easings: Readonly<Record<string, ((t: number) => number) | undefined>> = EASINGS;
+  const ease = easings[options.easing] ?? EASINGS[EasingType.Linear];
   let timer: ReturnType<typeof setTimeout> | undefined;
   let settled = false;
   let settle: (completed: boolean) => void = () => undefined;

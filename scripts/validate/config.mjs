@@ -59,8 +59,14 @@ export const validationConfig = {
     'noFallthroughCasesInSwitch',
     'noUnusedLocals',
     'noUnusedParameters',
-    'isolatedModules'
+    'isolatedModules',
+    'exactOptionalPropertyTypes',
+    'noPropertyAccessFromIndexSignature',
+    'verbatimModuleSyntax'
   ],
+
+  /** Compiler options that must stay off (so unreachable code and stray labels are errors). */
+  forbiddenCompilerOptions: ['allowUnreachableCode', 'allowUnusedLabels'],
 
   /** Paths that must be git-ignored and never committed. */
   ignoredPaths: ['node_modules', 'dist', 'coverage', '.validation-reports'],

@@ -28,7 +28,12 @@ const setMetadata = (
   session.metadata = new MediaMetadata({
     album: metadata.album ?? '',
     artist: metadata.artist ?? '',
-    artwork: metadata.artwork ?? [],
+    // Copy only the fields that are set: the browser type does not accept explicit undefined.
+    artwork: (metadata.artwork ?? []).map(({ sizes, src, type }) => ({
+      src,
+      ...(sizes === undefined ? {} : { sizes }),
+      ...(type === undefined ? {} : { type })
+    })),
     title: metadata.title ?? info.fileName
   });
 };

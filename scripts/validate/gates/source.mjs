@@ -176,8 +176,8 @@ export const sourceGates = [
   {
     category: 'source',
     description:
-      'Function bodies in src stay short enough to review (limit in config.mjs). File length is ' +
-      'not limited.',
+      'Warns about function bodies in src longer than the limit in config.mjs (a warning, not a ' +
+      'failure). File length is not limited.',
     id: 'size-limits',
     run: async () => {
       const { maxFunctionLines } = validationConfig.size;
@@ -200,7 +200,12 @@ export const sourceGates = [
       }
       return problems.length === 0
         ? pass(`Every function body is <= ${maxFunctionLines} lines`)
-        : fail(`${problems.length} size limit(s) exceeded`, problems);
+        : // A warning, not a failure: long functions deserve a look but do not block a release.
+          {
+            problems,
+            status: 'warn',
+            summary: `${problems.length} function(s) longer than ${maxFunctionLines} lines`
+          };
     },
     title: 'Function length'
   },

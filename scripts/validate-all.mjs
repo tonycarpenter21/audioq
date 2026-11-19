@@ -159,7 +159,7 @@ for (const gate of gates) {
   if (entry.status === 'skipped') continue;
   const seconds = (entry.durationMs / 1000).toFixed(1).padStart(5);
   console.log(`${ICON[entry.status]} ${gate.id.padEnd(26)} ${seconds}s  ${entry.summary}`);
-  if (entry.status === 'fail') {
+  if (entry.status === 'fail' || entry.status === 'warn') {
     // Print the problems too, so CI logs are useful without downloading the report.
     const shown = entry.problems.slice(0, 15);
     for (const problem of shown) console.log(`      ${problem.split('\n').join('\n      ')}`);
@@ -226,8 +226,18 @@ const warned = results.filter((result) => result.status === 'warn');
 if (warned.length) {
   md.push('## Warnings');
   md.push('');
-  for (const result of warned) md.push(`- ${ICON.warn} \`${result.id}\`: ${result.summary}`);
-  md.push('');
+  for (const result of warned) {
+    md.push(`### ${ICON.warn} ${result.title} (\`${result.id}\`)`);
+    md.push('');
+    md.push(`${result.summary}.`);
+    md.push('');
+    if (result.problems.length) {
+      md.push('```');
+      md.push(...result.problems.slice(0, 200));
+      md.push('```');
+      md.push('');
+    }
+  }
 }
 if (failed.length) {
   md.push('## Failing gates');

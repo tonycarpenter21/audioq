@@ -21,9 +21,9 @@ export interface GainRoute {
  */
 export const isIOSDevice = (): boolean => {
   if (typeof navigator === 'undefined') return false;
-  const userAgent = navigator.userAgent ?? '';
+  const userAgent = navigator.userAgent;
   if (/iPad|iPhone|iPod/.test(userAgent)) return true;
-  return /Macintosh/.test(userAgent) && (navigator.maxTouchPoints ?? 0) > 1;
+  return /Macintosh/.test(userAgent) && navigator.maxTouchPoints > 1;
 };
 
 /**

@@ -43,7 +43,7 @@ export class Emitter<Events extends object> {
     const registration = { callback, channel, key } as Registration<never>;
     set.add(registration);
     return (): void => {
-      set?.delete(registration);
+      set.delete(registration);
     };
   }
 

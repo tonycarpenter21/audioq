@@ -53,7 +53,8 @@ export const toolingGates = [
           '__tests__',
           'scripts',
           'eslint.config.mjs',
-          'jest.config.js'
+          'jest.config.js',
+          'jest.dist.config.js'
         ]),
         'No lint errors or warnings',
         'Lint errors or warnings found'
@@ -175,9 +176,14 @@ export const toolingGates = [
     id: 'tsconfig-strictness',
     run: async () => {
       const options = JSON.parse(read('tsconfig.json')).compilerOptions ?? {};
-      const problems = validationConfig.requiredCompilerOptions
-        .filter((flag) => options[flag] !== true)
-        .map((flag) => `tsconfig.json: "${flag}" must be true`);
+      const problems = [
+        ...validationConfig.requiredCompilerOptions
+          .filter((flag) => options[flag] !== true)
+          .map((flag) => `tsconfig.json: "${flag}" must be true`),
+        ...validationConfig.forbiddenCompilerOptions
+          .filter((flag) => options[flag] !== false)
+          .map((flag) => `tsconfig.json: "${flag}" must be false`)
+      ];
       return problems.length === 0
         ? pass(`${validationConfig.requiredCompilerOptions.length} strictness flags enabled`)
         : fail('Strictness flags were turned off', problems);

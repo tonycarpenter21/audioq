@@ -7,7 +7,8 @@
     "esModuleInterop": true,
     "types": ["jest", "node"],
     "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "noUnusedParameters": false,
+    "verbatimModuleSyntax": false
   },
   "include": ["__tests__/**/*", "src/**/*"]
 }

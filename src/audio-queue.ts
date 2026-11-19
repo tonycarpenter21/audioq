@@ -233,7 +233,9 @@ export class AudioQueue extends QueueEngine {
   ): Promise<QueueManipulationResult> {
     const channel = this.existing(channelNumber);
     const problem = this.checkSlot(channel, queuedSlotNumber, 'remove');
-    if (problem !== undefined || !channel) return { error: problem, success: false };
+    if (problem !== undefined || !channel) {
+      return { error: problem ?? 'Channel does not exist', success: false };
+    }
     const [item] = channel.items.splice(queuedSlotNumber, 1);
     if (item) this.finalize(item, 'removed');
     return this.afterManipulation(channel);
@@ -255,7 +257,9 @@ export class AudioQueue extends QueueEngine {
     const problem =
       this.checkSlot(channel, currentQueuedSlotNumber, 'move') ??
       this.checkSlot(channel, newQueuedSlotNumber, 'move to');
-    if (problem !== undefined || !channel) return { error: problem, success: false };
+    if (problem !== undefined || !channel) {
+      return { error: problem ?? 'Channel does not exist', success: false };
+    }
     const [item] = channel.items.splice(currentQueuedSlotNumber, 1);
     if (item) channel.items.splice(newQueuedSlotNumber, 0, item);
     return this.afterManipulation(channel, currentQueuedSlotNumber !== newQueuedSlotNumber);
@@ -276,7 +280,9 @@ export class AudioQueue extends QueueEngine {
     const channel = this.existing(channelNumber);
     const problem =
       this.checkSlot(channel, slotA, 'swap') ?? this.checkSlot(channel, slotB, 'swap');
-    if (problem !== undefined || !channel) return { error: problem, success: false };
+    if (problem !== undefined || !channel) {
+      return { error: problem ?? 'Channel does not exist', success: false };
+    }
     const a = channel.items[slotA] as Item;
     channel.items[slotA] = channel.items[slotB] as Item;
     channel.items[slotB] = a;
@@ -381,7 +387,8 @@ export class AudioQueue extends QueueEngine {
     channel.lastFade = { duration, fadeType };
     channel.pendingPause = true;
     const completed = await this.fade(channel, 0, duration ?? preset.duration, preset.pauseCurve);
-    if (completed && channel.pendingPause) this.pauseNow(channel);
+    // Every path that cancels the pause (resume, pause, stop, track change) cancels the fade too.
+    if (completed) this.pauseNow(channel);
   }
 
   /**

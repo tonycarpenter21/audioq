@@ -45,17 +45,20 @@ export const defaultQueueConfig = (): QueueConfig => ({
   webAudio: 'auto'
 });
 
-const FADE_CONFIGS: Readonly<Record<FadeType, FadeConfig>> = {
+const GENTLE_FADE: FadeConfig = {
+  duration: 800,
+  pauseCurve: EasingType.EaseOut,
+  resumeCurve: EasingType.EaseIn
+};
+
+// Indexed by string: plain-JavaScript callers can pass any value, so lookups may miss.
+const FADE_CONFIGS: Readonly<Record<string, FadeConfig | undefined>> = {
   [FadeType.Dramatic]: {
     duration: 800,
     pauseCurve: EasingType.EaseIn,
     resumeCurve: EasingType.EaseOut
   },
-  [FadeType.Gentle]: {
-    duration: 800,
-    pauseCurve: EasingType.EaseOut,
-    resumeCurve: EasingType.EaseIn
-  },
+  [FadeType.Gentle]: GENTLE_FADE,
   [FadeType.Linear]: {
     duration: 800,
     pauseCurve: EasingType.Linear,
@@ -73,7 +76,7 @@ const FADE_CONFIGS: Readonly<Record<FadeType, FadeConfig>> = {
  * ```
  */
 export const getFadeConfig = (fadeType: FadeType): FadeConfig => ({
-  ...(FADE_CONFIGS[fadeType] ?? FADE_CONFIGS[FadeType.Gentle])
+  ...(FADE_CONFIGS[fadeType] ?? GENTLE_FADE)
 });
 
 const isNonNegativeInteger = (value: unknown): boolean =>

@@ -347,7 +347,7 @@ export class QueueEngine {
     try {
       attempt = Promise.resolve(element.play());
     } catch (error) {
-      attempt = Promise.reject(error);
+      attempt = Promise.reject(toError(error, 'play() threw'));
     }
     return attempt.then(
       () => undefined,

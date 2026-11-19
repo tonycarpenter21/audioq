@@ -7,7 +7,8 @@
     "outDir": "./dist/cjs",
     "declaration": false,
     "removeComments": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "verbatimModuleSyntax": false
   },
   "include": ["src/**/*"]
 }

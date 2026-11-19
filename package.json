@@ -26,7 +26,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "lint": "eslint --max-warnings 0 src __tests__ scripts",
+    "lint": "eslint --max-warnings 0 src __tests__ scripts eslint.config.mjs jest.config.js jest.dist.config.js",
     "lint:fix": "eslint src __tests__ scripts --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

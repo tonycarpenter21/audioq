@@ -61,11 +61,11 @@ export type RepeatMode = 'off' | 'one' | 'all';
 /** Image for lock screens and media notifications (same shape as the Media Session API's). */
 export interface AudioArtwork {
   /** Size hint, for example `'512x512'`. */
-  sizes?: string;
+  sizes?: string | undefined;
   /** Image URL. */
   src: string;
   /** MIME type, for example `'image/png'`. */
-  type?: string;
+  type?: string | undefined;
 }
 
 /**
@@ -75,13 +75,13 @@ export interface AudioArtwork {
  */
 export interface AudioMetadata {
   /** Album or collection name. */
-  album?: string;
+  album?: string | undefined;
   /** Artist, speaker or author. */
-  artist?: string;
+  artist?: string | undefined;
   /** Artwork for media controls. */
-  artwork?: AudioArtwork[];
+  artwork?: AudioArtwork[] | undefined;
   /** Display title. */
-  title?: string;
+  title?: string | undefined;
   /** Any other data you want to carry with the item. */
   [key: string]: unknown;
 }
@@ -112,35 +112,35 @@ export type WebAudioMode = 'off' | 'auto' | 'force';
 /** Options for a single queued item. */
 export interface AudioQueueOptions {
   /** Insert right after the currently playing item instead of at the end. */
-  addToFront?: boolean;
+  addToFront?: boolean | undefined;
   /**
    * Ignore this call if the same source was queued on this channel within the last `dedupeMs`
    * milliseconds (for notification sounds that may fire in bursts). The returned handle settles
    * with `'skipped'`.
    */
-  dedupeMs?: number;
+  dedupeMs?: number | undefined;
   /**
    * Stop the current item and clear the channel, then play this one immediately
    * (barge-in for voice assistants, or a sound that replaces whatever is playing).
    */
-  interrupt?: boolean;
+  interrupt?: boolean | undefined;
   /** Information returned with every event for this item; see {@link AudioMetadata}. */
-  metadata?: AudioMetadata;
+  metadata?: AudioMetadata | undefined;
   /** Playback speed for this item (0.25-4, pitch preserved). Multiplied with the channel rate. */
-  playbackRate?: number;
+  playbackRate?: number | undefined;
   /** Start playback this many milliseconds into the file (for resuming). */
-  startAt?: number;
+  startAt?: number | undefined;
   /**
    * CORS mode for the element. Set this when the file is on another origin that sends CORS
    * headers and you need Web Audio volume control (iOS) for it.
    */
-  crossOrigin?: 'anonymous' | 'use-credentials';
+  crossOrigin?: 'anonymous' | 'use-credentials' | undefined;
   /** Repeat this item until it is stopped. */
-  loop?: boolean;
+  loop?: boolean | undefined;
   /** Queue limit for this call only. Overrides the channel and default limits. */
-  maxQueueSize?: number;
+  maxQueueSize?: number | undefined;
   /** Item volume (0-1). Multiplied with the channel and global volume. Defaults to 1. */
-  volume?: number;
+  volume?: number | undefined;
 }
 
 /** Minimal logger interface used for library warnings. */
@@ -154,7 +154,7 @@ export interface Logger {
 /** Configuration for an audio queue instance. */
 export interface QueueConfig {
   /** Default maximum items per channel, including the playing item. Unlimited when undefined. */
-  defaultMaxQueueSize?: number;
+  defaultMaxQueueSize?: number | undefined;
   /** When a channel is full, drop the oldest waiting item instead of rejecting the new one. */
   dropOldestWhenFull: boolean;
   /** Milliseconds the front item may take to start before it is skipped with a timeout error. */
@@ -181,7 +181,7 @@ export interface QueueConfig {
 /** Volume ducking: lower other channels while the priority channel has audio. */
 export interface VolumeConfig {
   /** Fade duration in ms when ducking starts. Defaults to 250. */
-  duckTransitionDuration?: number;
+  duckTransitionDuration?: number | undefined;
   /** Volume multiplier (0-1) applied to every other channel while ducking. */
   duckingVolume: number;
   /** Channel whose audio triggers ducking. */
@@ -189,9 +189,9 @@ export interface VolumeConfig {
   /** Volume multiplier (0-1) applied to the priority channel while it plays. */
   priorityVolume: number;
   /** Fade duration in ms when ducking ends. Defaults to 250. */
-  restoreTransitionDuration?: number;
+  restoreTransitionDuration?: number | undefined;
   /** Easing for ducking transitions. Defaults to ease-out. */
-  transitionEasing?: EasingType;
+  transitionEasing?: EasingType | undefined;
 }
 
 /** Fade settings for a fade preset. */
@@ -335,11 +335,11 @@ export interface QueueSnapshot {
 /** Result of a queue manipulation call. */
 export interface QueueManipulationResult {
   /** Explanation when `success` is false. */
-  error?: string;
+  error?: string | undefined;
   /** Whether the change was applied. */
   success: boolean;
   /** Queue state after the change. */
-  updatedQueue?: QueueSnapshot;
+  updatedQueue?: QueueSnapshot | undefined;
 }
 
 /** Handle for an item returned by `queueAudio`. */

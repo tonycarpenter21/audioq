@@ -5,7 +5,7 @@ import { connectMediaSession } from '../src/media-session';
 import { FakeAudio, audioAt, flush, installFakeAudio } from './helpers/fake-audio';
 
 class FakeMediaMetadata {
-  constructor(readonly init: Record<string, unknown>) {}
+  constructor(readonly init: MediaMetadataInit) {}
 }
 
 interface FakeSession {

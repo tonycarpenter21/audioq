@@ -15,7 +15,12 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "types": [],
-    "noEmit": true
+    "noEmit": true,
+    "exactOptionalPropertyTypes": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "verbatimModuleSyntax": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false
   },
   "include": ["src/**/*"]
 }
