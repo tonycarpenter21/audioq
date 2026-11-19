@@ -20,16 +20,40 @@ import { validationConfig } from './validate/config.mjs';
 import { gates } from './validate/gates.mjs';
 import { abs } from './validate/lib.mjs';
 
-const args = process.argv.slice(2);
-const option = (name) =>
-  args
-    .find((arg) => arg.startsWith(`--${name}=`))
-    ?.split('=')[1]
-    ?.split(',');
-const only = option('only');
-const skip = option('skip') ?? [];
+const usage = () => {
+  console.error('Usage: npm run validate:all -- [--list] [--only=a,b | --only a,b] [--skip=a,b]');
+  process.exit(2);
+};
 
-if (args.includes('--list')) {
+/** Parses --list, --only and --skip (with `=` or a following value). Unknown flags are errors. */
+const parseArgs = (argv) => {
+  const parsed = { list: false, only: undefined, skip: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--list') {
+      parsed.list = true;
+      continue;
+    }
+    const match = /^--(only|skip)(?:=(.*))?$/.exec(arg);
+    if (!match) {
+      console.error(`Unknown argument: ${arg}`);
+      usage();
+    }
+    const value = match[2] ?? argv[++i];
+    if (!value || value.startsWith('--')) {
+      console.error(`--${match[1]} needs a comma-separated list of gate ids`);
+      usage();
+    }
+    const ids = value.split(',').filter(Boolean);
+    if (match[1] === 'only') parsed.only = [...(parsed.only ?? []), ...ids];
+    else parsed.skip.push(...ids);
+  }
+  return parsed;
+};
+
+const { list, only, skip } = parseArgs(process.argv.slice(2));
+
+if (list) {
   for (const gate of gates) {
     const deps = gate.dependsOn ? ` (after: ${gate.dependsOn.join(', ')})` : '';
     console.log(
@@ -45,6 +69,36 @@ if (unknown.length) {
   process.exit(2);
 }
 
+/** --only also runs every gate the selected ones depend on, so nothing reads stale output. */
+const selectedIds = new Set();
+const include = (id) => {
+  if (selectedIds.has(id)) return;
+  selectedIds.add(id);
+  gates.find((gate) => gate.id === id)?.dependsOn?.forEach(include);
+};
+(only ?? gates.map((gate) => gate.id)).forEach(include);
+const autoIncluded = only ? [...selectedIds].filter((id) => !only.includes(id)) : [];
+
+/** Default limit for one gate; a gate may set its own `timeoutMs`. */
+const GATE_TIMEOUT_MS = 10 * 60 * 1000;
+
+const runWithTimeout = (gate) => {
+  const limit = gate.timeoutMs ?? GATE_TIMEOUT_MS;
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(
+      () =>
+        resolve({
+          problems: [`No result after ${Math.round(limit / 1000)}s`],
+          status: 'fail',
+          summary: 'Gate timed out'
+        }),
+      limit
+    );
+  });
+  return Promise.race([gate.run(), timeout]).finally(() => clearTimeout(timer));
+};
+
 const git = (...gitArgs) => {
   try {
     return execFileSync('git', gitArgs, { cwd: abs('.'), encoding: 'utf8' }).trim();
@@ -57,12 +111,15 @@ const ICON = { blocked: '⊘', fail: '✖', pass: '✔', skipped: '○', warn: '
 const startedAt = new Date();
 const results = [];
 
-console.log(`audioq validation: ${gates.length} gates\n`);
+console.log(`audioq validation: ${selectedIds.size - skip.length} of ${gates.length} gates`);
+if (autoIncluded.length) console.log(`(also running dependencies: ${autoIncluded.join(', ')})`);
+console.log('');
 for (const gate of gates) {
-  const selected = (!only || only.includes(gate.id)) && !skip.includes(gate.id);
+  const selected = selectedIds.has(gate.id) && !skip.includes(gate.id);
+  // A dependency that failed, was blocked, or was skipped means this gate would read stale output.
   const blockedBy = (gate.dependsOn ?? []).filter((id) =>
     results.some(
-      (result) => result.id === id && result.status !== 'pass' && result.status !== 'skipped'
+      (result) => result.id === id && result.status !== 'pass' && result.status !== 'warn'
     )
   );
   let result;
@@ -70,10 +127,15 @@ for (const gate of gates) {
   if (!selected) {
     result = { status: 'skipped', summary: 'Not selected' };
   } else if (blockedBy.length) {
-    result = { status: 'blocked', summary: `Blocked: ${blockedBy.join(', ')} did not pass` };
+    const reasons = blockedBy.map((id) =>
+      results.find((r) => r.id === id)?.status === 'skipped'
+        ? `${id} was skipped`
+        : `${id} did not pass`
+    );
+    result = { status: 'blocked', summary: `Blocked: ${reasons.join(', ')}` };
   } else {
     try {
-      result = await gate.run();
+      result = await runWithTimeout(gate);
     } catch (error) {
       result = {
         problems: [String(error?.stack ?? error)],
@@ -94,6 +156,7 @@ for (const gate of gates) {
     title: gate.title
   };
   results.push(entry);
+  if (entry.status === 'skipped') continue;
   const seconds = (entry.durationMs / 1000).toFixed(1).padStart(5);
   console.log(`${ICON[entry.status]} ${gate.id.padEnd(26)} ${seconds}s  ${entry.summary}`);
   if (entry.status === 'fail') {

@@ -59,8 +59,8 @@ const binEntries = {
 };
 
 /**
- * Runs a command and captures its output. Never throws.
- * @returns {Promise<{ code: number, output: string }>}
+ * Runs a command and captures its output. Never throws. `options.timeoutMs` kills it when slow.
+ * @returns {Promise<{ code: number, output: string, timedOut?: boolean }>}
  */
 export const runCommand = (command, args, options = {}) =>
   new Promise((resolve) => {
@@ -72,10 +72,21 @@ export const runCommand = (command, args, options = {}) =>
       shell: false
     });
     let output = '';
+    let timedOut = false;
+    const timer =
+      options.timeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true;
+            child.kill('SIGKILL');
+          }, options.timeoutMs);
     child.stdout.on('data', (chunk) => (output += chunk));
     child.stderr.on('data', (chunk) => (output += chunk));
     child.on('error', (error) => resolve({ code: 1, output: `${output}\n${error.message}` }));
-    child.on('close', (code) => resolve({ code: code ?? 1, output }));
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 1, output, timedOut });
+    });
   });
 
 /** Gate result helpers. */
@@ -125,7 +136,33 @@ export const lineOf = (file, node) => file.getLineAndCharacterOfPosition(node.ge
 export const runtimeExports = (path) => {
   const file = getSourceFile(path);
   const exportsFound = [];
+  const declarations = new Map();
   file.forEachChild((node) => {
+    if (ts.isFunctionDeclaration(node) && node.name) declarations.set(node.name.text, node);
+    if (ts.isClassDeclaration(node) && node.name) declarations.set(node.name.text, node);
+    if (ts.isVariableStatement(node)) {
+      for (const d of node.declarationList.declarations) {
+        if (ts.isIdentifier(d.name)) declarations.set(d.name.text, d);
+      }
+    }
+  });
+  file.forEachChild((node) => {
+    // `export { a, b }` lists without a module specifier export local declarations.
+    if (
+      ts.isExportDeclaration(node) &&
+      !node.moduleSpecifier &&
+      !node.isTypeOnly &&
+      node.exportClause &&
+      ts.isNamedExports(node.exportClause)
+    ) {
+      for (const element of node.exportClause.elements) {
+        if (element.isTypeOnly) continue;
+        const local = declarations.get((element.propertyName ?? element.name).text);
+        const kind = local && ts.isClassDeclaration(local) ? 'class' : 'function';
+        exportsFound.push({ kind, name: element.name.text, node: local ?? element });
+      }
+      return;
+    }
     if (!hasModifier(node, ts.SyntaxKind.ExportKeyword)) return;
     if (ts.isFunctionDeclaration(node) && node.name) {
       exportsFound.push({ kind: 'function', name: node.name.text, node });
@@ -150,23 +187,31 @@ export const runtimeExports = (path) => {
   return exportsFound;
 };
 
-/** Public (non-private, non-protected) methods and accessors of a class declaration. */
+/** Public methods, accessors and function-valued properties of a class declaration. */
 export const publicMembers = (classNode) =>
   classNode.members.filter(
     (member) =>
-      (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member)) &&
+      (ts.isMethodDeclaration(member) ||
+        ts.isGetAccessorDeclaration(member) ||
+        (ts.isPropertyDeclaration(member) &&
+          member.initializer !== undefined &&
+          (ts.isArrowFunction(member.initializer) ||
+            ts.isFunctionExpression(member.initializer)))) &&
       member.name &&
       ts.isIdentifier(member.name) &&
       !hasModifier(member, ts.SyntaxKind.PrivateKeyword) &&
       !hasModifier(member, ts.SyntaxKind.ProtectedKeyword)
   );
 
-/** Every identifier and property name referenced in a file. */
+/**
+ * Identifiers used in a file's code. String literals and import declarations do not count, so a
+ * test cannot "cover" a symbol by mentioning its name in a string or merely importing it.
+ */
 export const referencedNames = (path) => {
   const names = new Set();
   const visit = (node) => {
+    if (ts.isImportDeclaration(node)) return;
     if (ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) names.add(node.text);
-    if (ts.isStringLiteral(node)) names.add(node.text);
     ts.forEachChild(node, visit);
   };
   visit(getSourceFile(path));

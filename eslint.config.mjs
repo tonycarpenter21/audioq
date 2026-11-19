@@ -66,6 +66,8 @@ export default [
         require: 'readonly',
         URL: 'readonly',
         Buffer: 'readonly',
+        clearTimeout: 'readonly',
+        setTimeout: 'readonly',
         __dirname: 'readonly'
       },
       sourceType: 'module'

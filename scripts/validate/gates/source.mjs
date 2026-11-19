@@ -25,9 +25,8 @@ import {
  */
 const FORBIDDEN = [
   [/\bconsole\.[a-z]+\s*\(/, 'console call (use the configurable logger)', ['src/config.ts']],
-  [/(:\s*any\b|\bas\s+any\b|<any>)/, 'explicit any'],
-  [/@ts-(ignore|nocheck|expect-error)/, 'TypeScript suppression comment'],
-  [/eslint-disable/, 'eslint-disable comment'],
+  [/@ts-(ignore|nocheck|expect-error)/, 'TypeScript suppression comment', [], true],
+  [/eslint-disable/, 'eslint-disable comment', [], true],
   [/\bdebugger\b/, 'debugger statement'],
   [
     /\b(TODO|FIXME|XXX|HACK)\b/,
@@ -94,9 +93,20 @@ export const sourceGates = [
             }
           });
       }
+      // `any` is found on the syntax tree, so Record<string, any>, any[] and <any> are all caught.
+      for (const path of sourceFiles()) {
+        const file = getSourceFile(path);
+        const visit = (node) => {
+          if (node.kind === ts.SyntaxKind.AnyKeyword) {
+            problems.push(`${path}:${lineOf(file, node)} explicit any`);
+          }
+          ts.forEachChild(node, visit);
+        };
+        visit(file);
+      }
       return problems.length === 0
         ? pass(
-            `${FORBIDDEN.length} forbidden patterns checked across ${sourceFiles().length} files`
+            `${FORBIDDEN.length + 1} forbidden patterns checked across ${sourceFiles().length} files`
           )
         : fail(`${problems.length} forbidden pattern(s)`, problems);
     },
@@ -241,8 +251,13 @@ function checkDoc(path, file, docNode, label, fn) {
   const docs = ts.getJSDocCommentsAndTags(docNode).filter(ts.isJSDoc);
   const where = `${path}:${lineOf(file, docNode)} ${label}`;
   if (docs.length === 0) return [`${where} has no JSDoc`];
-  if (!fn) return [];
   const doc = docs[docs.length - 1];
+  const description = ts.getTextOfJSDocComment(doc.comment)?.trim() ?? '';
+  const isConstructor = ts.isConstructorDeclaration(docNode);
+  if (description.length === 0 && !isConstructor) {
+    return [`${where} has an empty JSDoc description`];
+  }
+  if (!fn) return [];
   const tags = doc.tags ?? [];
   const params = tags.filter(ts.isJSDocParameterTag).map((tag) => tag.name.getText());
   const problems = [];

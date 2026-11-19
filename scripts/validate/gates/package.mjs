@@ -49,7 +49,10 @@ export const packageGates = [
       'Warns instead of failing when the registry cannot be reached.',
     id: 'dependency-audit',
     run: async () => {
-      const result = await runCommand('npm', ['audit', '--json']);
+      const result = await runCommand('npm', ['audit', '--json'], { timeoutMs: 60_000 });
+      if (result.timedOut) {
+        return { output: result.output, status: 'warn', summary: 'npm audit timed out (offline?)' };
+      }
       let report;
       try {
         report = JSON.parse(result.output.slice(result.output.indexOf('{')));

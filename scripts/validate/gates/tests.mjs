@@ -15,6 +15,7 @@ import {
   runtimeExports,
   sourceFiles,
   testFiles,
+  testSupportFiles,
   ts
 } from '../lib.mjs';
 
@@ -31,11 +32,30 @@ const testsFor = (sourcePath) => {
 const isShared = (path) =>
   validationConfig.testPairing.sharedTestDirectories.some((dir) => path.startsWith(dir));
 
-/** Names a test file may mention to cover a symbol (the symbol and its file's re-export names). */
+/** Whether a source file only re-exports other modules (index.ts). */
 const isReExportOnly = (sourcePath) => runtimeExports(sourcePath).length === 0;
 
-const FOCUS_OR_SKIP =
-  /\b(?:(?:describe|test|it)\.(?:only|skip|todo)|fdescribe|fit|xdescribe|xit|xtest)\s*\(/;
+/** Jest globals that run tests. */
+const TEST_ROOTS = new Set(['describe', 'test', 'it']);
+/** Modifiers that focus, skip, or weaken tests. */
+const BANNED_MODIFIERS = new Set(['only', 'skip', 'todo', 'failing', 'concurrent']);
+/** Aliases for focused or skipped tests. */
+const BANNED_ALIASES = new Set(['fdescribe', 'fit', 'xdescribe', 'xit', 'xtest']);
+
+/** Root identifier and member names of a call like `test.only.each(...)`. */
+const chainOf = (expression) => {
+  const members = [];
+  let current = expression;
+  while (ts.isPropertyAccessExpression(current) || ts.isCallExpression(current)) {
+    if (ts.isPropertyAccessExpression(current)) {
+      members.unshift(current.name.text);
+      current = current.expression;
+    } else {
+      current = current.expression;
+    }
+  }
+  return { members, root: ts.isIdentifier(current) ? current.text : undefined };
+};
 
 export const testGates = [
   {
@@ -105,29 +125,36 @@ export const testGates = [
   {
     category: 'tests',
     description:
-      'Every test has at least one expect(), and nothing is focused (.only/fit) or skipped ' +
-      '(.skip/xit/.todo).',
+      'Every test is an inline function with at least one expect(), and nothing is focused, ' +
+      'skipped or weakened (.only, .skip, .todo, .failing, .concurrent, fit, xit, ... in any ' +
+      'combination, e.g. test.only.each).',
     id: 'test-quality',
     run: async () => {
       const problems = [];
       let tests = 0;
       for (const path of testFiles()) {
         const file = getSourceFile(path);
-        read(path)
-          .split('\n')
-          .forEach((line, index) => {
-            if (FOCUS_OR_SKIP.test(line))
-              problems.push(`${path}:${index + 1} focused or skipped test`);
-          });
         const visit = (node) => {
-          if (ts.isCallExpression(node) && isTestCall(node.expression)) {
-            const body = node.arguments.find(
-              (arg) => ts.isArrowFunction(arg) || ts.isFunctionExpression(arg)
-            );
-            if (body) {
+          if (ts.isCallExpression(node)) {
+            const { members, root } = chainOf(node.expression);
+            const banned = members.find((member) => BANNED_MODIFIERS.has(member));
+            if (root && BANNED_ALIASES.has(root)) {
+              problems.push(`${path}:${lineOf(file, node)} ${root}() focuses or skips tests`);
+            } else if (root && TEST_ROOTS.has(root) && banned) {
+              problems.push(
+                `${path}:${lineOf(file, node)} ${root}.${members.join('.')} is not allowed`
+              );
+            }
+            if (isTestCall(node.expression)) {
               tests++;
-              if (!containsExpect(body))
-                problems.push(`${path}:${lineOf(file, node)} test has no expect()`);
+              const body = node.arguments[1];
+              if (!body || !(ts.isArrowFunction(body) || ts.isFunctionExpression(body))) {
+                problems.push(`${path}:${lineOf(file, node)} test body must be an inline function`);
+              } else if (!containsExpect(body)) {
+                problems.push(
+                  `${path}:${lineOf(file, node)} test has no expect() that always runs`
+                );
+              }
             }
           }
           ts.forEachChild(node, visit);
@@ -143,28 +170,38 @@ export const testGates = [
   {
     category: 'tests',
     description:
-      'Tests must not replace global timers or other globals with synchronous fakes ' +
+      'Tests and helpers must not replace global timers or Promise with fakes of their own ' +
       '(that hid every timing bug in v2). Use jest.useFakeTimers() instead.',
     id: 'no-global-timer-hacks',
     run: async () => {
-      const pattern =
-        /\b(global|globalThis|window)\.(setTimeout|setInterval|requestAnimationFrame|Promise)\s*=/;
+      const timers =
+        '(setTimeout|setInterval|clearTimeout|clearInterval|requestAnimationFrame|Promise|queueMicrotask)';
+      const patterns = [
+        new RegExp(`\\b(global|globalThis|window|self)\\.${timers}\\s*=`),
+        new RegExp(
+          `defineProperty\\(\\s*(global|globalThis|window|self)\\s*,\\s*['"]${timers}['"]`
+        ),
+        new RegExp(
+          `spyOn\\(\\s*(global|globalThis|window|self)\\s*,\\s*['"]${timers}['"]\\s*\\)\\s*\\.\\s*mock(Implementation|ReturnValue)`
+        )
+      ];
       const problems = [];
-      for (const path of [...testFiles(), 'jest.config.js']) {
+      for (const path of [...testSupportFiles(), 'jest.config.js']) {
         read(path)
           .split('\n')
           .forEach((line, index) => {
-            if (pattern.test(line)) problems.push(`${path}:${index + 1} ${line.trim()}`);
+            if (patterns.some((pattern) => pattern.test(line))) {
+              problems.push(`${path}:${index + 1} ${line.trim()}`);
+            }
           });
       }
-      const jestConfig = read('jest.config.js');
-      if (/setupFiles(AfterEnv)?/.test(jestConfig)) {
+      if (/setupFiles(AfterEnv)?/.test(read('jest.config.js'))) {
         problems.push(
           'jest.config.js: global setup files are not allowed; import helpers explicitly'
         );
       }
       return problems.length === 0
-        ? pass('No global timer or Promise replacements in tests')
+        ? pass('No global timer or Promise replacements in tests or helpers')
         : fail('Tests replace globals', problems);
     },
     title: 'No global timer hacks in tests'
@@ -187,6 +224,10 @@ function isEachCall(expression) {
   );
 }
 
+/**
+ * Whether a test body calls expect() on a path that always runs. Expectations only inside an
+ * `if`, a ternary, a `catch`, or the right side of `&&`/`||`/`??` may never execute.
+ */
 function containsExpect(node) {
   let found = false;
   const visit = (child) => {
@@ -195,8 +236,28 @@ function containsExpect(node) {
       found = true;
       return;
     }
+    if (ts.isIfStatement(child)) {
+      visit(child.expression);
+      return;
+    }
+    if (ts.isConditionalExpression(child)) {
+      visit(child.condition);
+      return;
+    }
+    if (ts.isCatchClause(child)) return;
+    if (
+      ts.isBinaryExpression(child) &&
+      [
+        ts.SyntaxKind.AmpersandAmpersandToken,
+        ts.SyntaxKind.BarBarToken,
+        ts.SyntaxKind.QuestionQuestionToken
+      ].includes(child.operatorToken.kind)
+    ) {
+      visit(child.left);
+      return;
+    }
     ts.forEachChild(child, visit);
   };
-  visit(node);
+  ts.forEachChild(node, visit);
   return found;
 }

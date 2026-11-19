@@ -17,7 +17,8 @@ const codeBlocks = (markdown) => {
   const lines = markdown.split('\n');
   const blocks = [];
   for (let i = 0; i < lines.length; i++) {
-    const open = lines[i].match(/^```(ts|typescript)\s*$/);
+    // Any TypeScript fence counts, including ones with an info string (```ts title="x").
+    const open = lines[i].match(/^```(ts|typescript|tsx)(\s.*)?$/);
     if (!open) continue;
     const skip =
       /<!--\s*validate:skip\s*-->/.test(lines[i - 1] ?? '') ||
@@ -47,7 +48,7 @@ const typecheckExamples = (documentPath) => {
       'declare const button: HTMLButtonElement;',
       'export async function example(): Promise<void> {'
     ];
-    const fileName = abs(`.validation-examples/example-${index}.ts`);
+    const fileName = abs(`.validation-examples/${documentPath}-example-${index}.ts`);
     files.set(fileName, {
       block,
       headerLines: header.length,
@@ -147,7 +148,8 @@ export const docGates = [
     description: 'Every runtime export of the package is mentioned in README.md.',
     id: 'readme-api-coverage',
     run: async () => {
-      const readme = read('README.md');
+      // HTML comments are invisible to readers, so they do not count as documentation.
+      const readme = read('README.md').replace(/<!--[\s\S]*?-->/g, '');
       const missing = runtimeApiNames().filter((name) => !new RegExp(`\\b${name}\\b`).test(readme));
       return missing.length === 0
         ? pass('README mentions every runtime export')
@@ -165,10 +167,24 @@ export const docGates = [
       '(opt out per block with <!-- validate:skip -->).',
     id: 'readme-examples-compile',
     run: async () => {
-      const { count, problems } = typecheckExamples('README.md');
+      const documents = ['README.md', 'MIGRATION.md'].filter(exists);
+      let count = 0;
+      const problems = [];
+      for (const doc of documents) {
+        const result = typecheckExamples(doc);
+        count += result.count;
+        problems.push(...result.problems);
+        read(doc)
+          .split('\n')
+          .forEach((line, index) => {
+            if (/^```(js|javascript|jsx)\b/.test(line)) {
+              problems.push(`${doc}:${index + 1} use a ts fence so the example is type-checked`);
+            }
+          });
+      }
       return problems.length === 0
-        ? pass(`${count} README examples compile`)
-        : fail(`${problems.length} README example error(s)`, problems);
+        ? pass(`${count} README and MIGRATION examples compile`)
+        : fail(`${problems.length} example error(s)`, problems);
     },
     title: 'README examples compile'
   },
@@ -179,7 +195,10 @@ export const docGates = [
     run: async () => {
       const problems = [];
       for (const doc of ['README.md', 'MIGRATION.md', 'CHANGELOG.md'].filter(exists)) {
-        for (const [, target] of read(doc).matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)) {
+        const text = read(doc);
+        const inline = [...text.matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)].map((m) => m[1]);
+        const reference = [...text.matchAll(/^\s*\[[^\]]+\]:\s*<?([^>\s#]+)/gm)].map((m) => m[1]);
+        for (const target of [...inline, ...reference]) {
           if (/^[a-z]+:/i.test(target)) continue;
           if (!exists(target.replace(/^\.\//, '')))
             problems.push(`${doc} links to missing ${target}`);
