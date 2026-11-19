@@ -20,6 +20,7 @@ const ORDER = [
   'git-hygiene',
   'package-metadata',
   'lockfile-sync',
+  'dependency-audit',
   'license',
   'changelog',
   'docs-links',

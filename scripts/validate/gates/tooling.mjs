@@ -13,7 +13,7 @@ export const toolingGates = [
     id: 'generated-code',
     run: async () => {
       const expected = await renderDefaultApi();
-      let current = '';
+      let current;
       try {
         current = readFileSync(abs('src/default-queue.ts'), 'utf8');
       } catch {

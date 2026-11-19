@@ -40,10 +40,10 @@ export class Emitter<Events extends object> {
       set = new Set();
       this.listeners.set(event, set);
     }
-    const registration: Registration<Events[K]> = { callback, channel, key };
-    set.add(registration as Registration<never>);
+    const registration = { callback, channel, key } as Registration<never>;
+    set.add(registration);
     return (): void => {
-      set?.delete(registration as Registration<never>);
+      set?.delete(registration);
     };
   }
 

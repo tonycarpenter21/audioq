@@ -284,6 +284,8 @@ onwards, plus their mobile versions. Node.js is supported for importing (SSR) bu
 
 ## Development
 
+Developing audioq needs Node 20.19+, 22.13+ or 24+ (the library itself runs in any browser).
+
 ```bash
 npm install
 npm test               # unit tests

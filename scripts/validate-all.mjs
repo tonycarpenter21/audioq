@@ -53,7 +53,7 @@ const git = (...gitArgs) => {
   }
 };
 
-const ICON = { blocked: '⊘', fail: '✖', pass: '✔', skipped: '○' };
+const ICON = { blocked: '⊘', fail: '✖', pass: '✔', skipped: '○', warn: '⚠' };
 const startedAt = new Date();
 const results = [];
 
@@ -129,6 +129,7 @@ const meta = {
   startedAt: startedAt.toISOString()
 };
 const totals = {
+  warned: count('warn'),
   blocked: count('blocked'),
   failed: count('fail'),
   passed: count('pass'),
@@ -147,9 +148,16 @@ md.push('');
 md.push(`- Run: ${meta.startedAt} (${totalSeconds}s, Node ${meta.node})`);
 md.push(`- Commit: ${meta.commit} on ${meta.branch}${meta.dirty ? ' (uncommitted changes)' : ''}`);
 md.push(
-  `- Gates: ${totals.passed} passed, ${totals.failed} failed, ${totals.blocked} blocked, ${totals.skipped} skipped`
+  `- Gates: ${totals.passed} passed, ${totals.failed} failed, ${totals.blocked} blocked, ${totals.warned} warned, ${totals.skipped} skipped`
 );
 md.push('');
+const warned = results.filter((result) => result.status === 'warn');
+if (warned.length) {
+  md.push('## Warnings');
+  md.push('');
+  for (const result of warned) md.push(`- ${ICON.warn} \`${result.id}\`: ${result.summary}`);
+  md.push('');
+}
 if (failed.length) {
   md.push('## Failing gates');
   md.push('');
@@ -195,7 +203,7 @@ for (const old of runs.slice(0, Math.max(0, runs.length - validationConfig.repor
 
 console.log(
   `\n${failed.length === 0 ? 'PASSED' : 'FAILED'}: ${totals.passed} passed, ${totals.failed} failed, ` +
-    `${totals.blocked} blocked, ${totals.skipped} skipped in ${totalSeconds}s`
+    `${totals.blocked} blocked, ${totals.warned} warned, ${totals.skipped} skipped in ${totalSeconds}s`
 );
 console.log(`Report: ${validationConfig.reports.directory}/${runId}/report.md`);
 process.exit(failed.length === 0 ? 0 : 1);

@@ -43,6 +43,42 @@ const added = Object.getOwnPropertyNames(globalThis).filter((key) => !before.has
 export const packageGates = [
   {
     category: 'package',
+    description:
+      'npm audit finds no known vulnerabilities in any dependency (dev tools included). ' +
+      'Warns instead of failing when the registry cannot be reached.',
+    id: 'dependency-audit',
+    run: async () => {
+      const result = await runCommand('npm', ['audit', '--json']);
+      let report;
+      try {
+        report = JSON.parse(result.output.slice(result.output.indexOf('{')));
+      } catch {
+        return {
+          status: 'warn',
+          summary: 'npm audit unavailable (offline?)',
+          output: result.output
+        };
+      }
+      if (report.error) {
+        return {
+          output: result.output,
+          status: 'warn',
+          summary: `npm audit unavailable: ${report.error.code ?? 'error'}`
+        };
+      }
+      const counts = report.metadata?.vulnerabilities ?? {};
+      const total = counts.total ?? 0;
+      if (total === 0) return pass('0 known vulnerabilities', { output: result.output });
+      const problems = Object.values(report.vulnerabilities ?? {}).map(
+        (v) =>
+          `${v.name} (${v.severity}${v.isDirect ? ', direct' : ''}): ${v.via.map((x) => (typeof x === 'string' ? x : x.title)).join('; ')}`
+      );
+      return fail(`${total} known vulnerabilities`, problems, { output: result.output });
+    },
+    title: 'Dependency audit'
+  },
+  {
+    category: 'package',
     description: 'package.json has the fields consumers and registries need, with sane values.',
     id: 'package-metadata',
     run: async () => {
@@ -207,7 +243,7 @@ export const packageGates = [
     run: async () => {
       const result = await runCommand('npm', ['pack', '--dry-run', '--json', '--ignore-scripts']);
       let files;
-      let unpackedSize = 0;
+      let unpackedSize;
       try {
         const parsed = JSON.parse(result.output.slice(result.output.indexOf('[')));
         files = parsed[0].files.map((file) => file.path);
