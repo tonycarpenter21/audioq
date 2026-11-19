@@ -82,6 +82,12 @@ export const validationConfig = {
     '@typescript-eslint/require-await': 'public methods are async for a stable API'
   },
 
+  /** Rules beyond the presets that must stay errors in src (lint-strictness checks them too). */
+  requiredLintRules: [
+    'perfectionist/sort-objects',
+    '@typescript-eslint/strict-boolean-expressions'
+  ],
+
   /** Like allowedOffLintRules, but only in tests. */
   allowedOffLintRulesInTests: {
     '@typescript-eslint/unbound-method':

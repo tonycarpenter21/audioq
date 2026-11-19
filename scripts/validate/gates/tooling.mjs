@@ -221,6 +221,7 @@ export const toolingGates = [
               .map(([rule]) => rule)
         )
       );
+      for (const rule of validationConfig.requiredLintRules) presetRules.add(rule);
       const eslint = new ESLint({ cwd: abs('.') });
       const problems = [];
       for (const file of ['src/engine.ts', '__tests__/audio-queue.test.ts']) {
@@ -229,7 +230,10 @@ export const toolingGates = [
           const setting = config.rules?.[rule];
           const level = Array.isArray(setting) ? setting[0] : setting;
           const isError = level === 2 || level === 'error';
+          const isTestOnlyExemption =
+            file.startsWith('__tests__/') && rule === 'perfectionist/sort-objects';
           const allowed =
+            isTestOnlyExemption ||
             rule in validationConfig.allowedOffLintRules ||
             (file.startsWith('__tests__/') && rule in validationConfig.allowedOffLintRulesInTests);
           if (!isError && !allowed) {

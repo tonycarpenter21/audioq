@@ -8,10 +8,10 @@ import { now } from './utils.js';
 
 /** Easing functions mapping progress (0-1) to eased progress (0-1). */
 export const EASINGS: Readonly<Record<EasingType, (t: number) => number>> = {
-  [EasingType.Linear]: (t: number): number => t,
   [EasingType.EaseIn]: (t: number): number => t * t,
+  [EasingType.EaseInOut]: (t: number): number => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
   [EasingType.EaseOut]: (t: number): number => t * (2 - t),
-  [EasingType.EaseInOut]: (t: number): number => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t)
+  [EasingType.Linear]: (t: number): number => t
 };
 
 /** Interval between transition steps in milliseconds. */

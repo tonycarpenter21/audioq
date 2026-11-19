@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import perfectionist from 'eslint-plugin-perfectionist';
 import tseslint from 'typescript-eslint';
 
 // Shared style and correctness rules for TypeScript files
@@ -8,7 +9,9 @@ const commonRules = {
   eqeqeq: ['error', 'always'],
   'no-var': 'error',
   'prefer-const': 'error',
-  'sort-keys': ['error', 'asc', { caseSensitive: true, minKeys: 2, natural: true }],
+  // Object keys in natural order. Unlike the built-in sort-keys, this rule can fix itself
+  // (eslint --fix), and it keeps keys that depend on earlier ones after them.
+  'perfectionist/sort-objects': ['error', { ignoreCase: false, order: 'asc', type: 'natural' }],
   '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],
   '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
   '@typescript-eslint/prefer-nullish-coalescing': [
@@ -54,6 +57,7 @@ const commonRules = {
 
 export default [
   js.configs.recommended,
+  { plugins: { perfectionist } },
   // The strictest typescript-eslint presets, applied to TypeScript files only (below).
   ...[...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked].map(
     (config) => ({ ...config, files: ['src/**/*.ts', '__tests__/**/*.ts'] })
@@ -84,7 +88,7 @@ export default [
     },
     rules: {
       ...commonRules,
-      'sort-keys': 'off',
+      'perfectionist/sort-objects': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       // expect(object.method).toHaveBeenCalled() is the Jest idiom; it never calls the method.
       '@typescript-eslint/unbound-method': 'off'
