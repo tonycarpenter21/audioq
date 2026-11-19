@@ -42,6 +42,7 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   `defineSprite(src, { name: [startMs, endMs] })` (tree-shakable).
 - **Cues**: `cues` option and `onAudioCue`/`offAudioCue` for captions, lyrics and lip-sync; ranged
   cues report enter and exit, point cues fire once; timed precisely and follow seeks.
+  `parseWebVtt` turns a .vtt caption file into cues (tree-shakable).
 - **Crossfade**: `setCrossfade(channel, ms)` overlaps consecutive items.
 - **OS pause/play detection**: when a phone call, unplugged headphones, the lock screen or Control
   Center pauses or plays audio, the channel state follows and pause/resume events fire.

@@ -12,6 +12,7 @@ export * from './default-queue.js';
 export { connectMediaSession } from './media-session.js';
 export type { MediaSessionOptions } from './media-session.js';
 export { defineSprite } from './sprite.js';
+export { parseVttTimestamp, parseWebVtt } from './webvtt.js';
 export type { AudioSprite, SpriteMap, SpriteSegment } from './sprite.js';
 export { extractFileName } from './utils.js';
 export { isIOSDevice, isWebAudioSupported } from './web-audio.js';

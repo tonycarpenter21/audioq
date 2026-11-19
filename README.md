@@ -202,6 +202,15 @@ await queueAudio('/voice/intro.mp3', 1, {
 offAudioCue(1);
 ```
 
+Captions you already have as a WebVTT file convert to cues with `parseWebVtt`
+(`parseVttTimestamp` converts a single timestamp):
+
+```ts
+const vtt = await (await fetch('/captions/intro.vtt')).text();
+await queueAudio('/voice/intro.mp3', 1, { cues: parseWebVtt(vtt) });
+console.log(parseVttTimestamp('01:02.500')); // 62500
+```
+
 **Crossfade** overlaps consecutive items: near the end of each item the next starts and fades in
 while the current one fades out (at most half of an item's length).
 

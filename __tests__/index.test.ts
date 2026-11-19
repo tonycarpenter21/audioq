@@ -11,6 +11,8 @@ describe('package entry point', () => {
     expect(typeof audioq.queueAudio).toBe('function');
     expect(typeof audioq.connectMediaSession).toBe('function');
     expect(typeof audioq.defineSprite).toBe('function');
+    expect(audioq.parseWebVtt('')).toEqual([]);
+    expect(audioq.parseVttTimestamp('00:01.000')).toBe(1000);
     expect(typeof audioq.getDefaultAudioQueue).toBe('function');
   });
 

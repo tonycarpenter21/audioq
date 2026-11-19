@@ -303,6 +303,14 @@
     "kind": "function",
     "signature": "(channelNumber: number, callback: QueueChangeCallback) => Unsubscribe"
   },
+  "parseVttTimestamp": {
+    "kind": "function",
+    "signature": "(timestamp: string) => number"
+  },
+  "parseWebVtt": {
+    "kind": "function",
+    "signature": "(text: string) => AudioCue[]"
+  },
   "pauseAllChannels": {
     "kind": "function",
     "signature": "() => Promise<void>"

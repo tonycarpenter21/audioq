@@ -11,7 +11,7 @@ Done in 3.0:
 - Playlist helpers: `metadata`, `interrupt`, `dedupeMs`, Blob/File sources, `pauseWhenHidden`
 - Crossfade between items: `setCrossfade`
 - Audio sprites: `endAt`, `defineSprite`
-- Captions, lyrics, lip-sync: `cues` + `onAudioCue`
+- Captions, lyrics, lip-sync: `cues` + `onAudioCue`, WebVTT files via `parseWebVtt`
 
 Not planned as APIs (a timer does it; recipes are in the README):
 - Sleep timer
@@ -21,7 +21,6 @@ Potential New Package Features:
 - Sample-accurate gapless playback. Needs decoding whole files into Web Audio buffers (memory
   heavy; specialist libraries like gapless-5 do this). `setCrossfade(channel, 50)` hides the
   small gap between items for most music.
-- WebVTT caption files: parse a .vtt into `cues` (small helper)
 - Accessibility - audio descriptions (a second channel with ducking already covers most uses)
 
 Potential New Dev Features:
