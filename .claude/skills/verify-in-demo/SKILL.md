@@ -29,22 +29,25 @@ after every library change (it is a copy, not a link).
 ## 3. Check the demo
 
 ```bash
-npm run typecheck
-npm run lint
-npm run e2e
+npm run validate
 ```
 
-`npm run e2e` builds the demo, serves it with HTTP Range support (like GitHub Pages; Python's
-`http.server` lacks Range support, which breaks seeking and sprites) and walks every tab in
-Chromium with assertions. It needs Playwright and Chromium. When you add a feature to the
-demo, add a `check(...)` for it in `scripts/e2e/run.js`.
+It runs every check and prints a summary: the installed audioq version, compiler and lint
+strictness, formatting, lint (zero warnings), stylelint, types, unit tests, unused modules, the
+build, and `npm run e2e` (it serves the build with HTTP Range support, like GitHub Pages, and
+walks every tab in Chromium with assertions; Python's `http.server` lacks Range support, which
+breaks seeking and sprites). Use `npm run validate -- --skip-e2e` for a quick pass. When you add a
+feature to the demo, add a `check(...)` for it in `scripts/e2e/run.js`.
+
+Any other `npm install` in the demo removes the `--no-save` tarball again (the version check
+fails and says so): reinstall it after adding dependencies.
 
 Demo conventions:
 
-- Examples live in `src/MultiChannelExampleBlock/` (`exampleData.ts`, `v3Examples.ts`). A
-  button's channel and its enabled state come from its text: include "(Channel 0)" or
-  "(Channel 1)", or "All Sounds"/"All Channels" for the global row. Avoid the words "pause",
-  "resume" and "toggle" unless the button does that.
+- Examples live in `src/MultiChannelExampleBlock/` (`exampleData.ts`, `v3Examples.ts`). Each
+  declares `channel` (0, 1 or 'global') and `enabledWhen` ('always', 'hasAudio', 'idle',
+  'playing', 'paused'); button text is free. The rules are in `src/ExampleTab/exampleOrganizer.ts`.
+- Async button handlers return their promise; fire-and-forget calls are written `void call()`.
 - Read channel state with the `useChannel` hook (createChannelStore), not polling.
 - Settings a tab changes must be reset in `performFullCleanup` (src/App.tsx) or the tab
   component's cleanup.
@@ -53,9 +56,11 @@ Demo conventions:
 
 ```bash
 cd ../audio-queue-docs
-AUDIOQ_DIR=../audioq npm run check   # examples compile against the built types; sidebar complete
-npm run build                        # broken links and anchors fail the build
+AUDIOQ_DIR=../audioq npm run validate
 ```
+
+Examples compile against the built types, every page is in the sidebar, the tsconfig stays
+strict, the site's own code type-checks, and the build fails on broken links and anchors.
 
 ## 5. Hand over for device QA
 

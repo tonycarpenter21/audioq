@@ -56,7 +56,7 @@ npm run api:update   # api/public-api.json snapshot
 - Docs site (`../audio-queue-docs`): the API reference page, `quick-reference.md`, and
   `types-interfaces.md` for new types. Function shapes go in ` ```ts signature ` blocks; every
   other ` ```ts ` block must compile. New pages go in `sidebars.ts`. Check with
-  `AUDIOQ_DIR=../audioq npm run check` and `npm run build` in the docs repo.
+  `AUDIOQ_DIR=../audioq npm run validate` in the docs repo.
 - TODO.md: move the item to "Done".
 
 ## 6. Show it in the demo
