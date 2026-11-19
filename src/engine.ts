@@ -159,8 +159,13 @@ export class QueueEngine {
    */
   constructor(config: Partial<QueueConfig> = {}) {
     this.config = mergeQueueConfig(defaultQueueConfig(), config);
-    this.emitter = new Emitter<QueueEvents>((error) =>
-      this.config.logger?.error('audioq: error in event listener', error)
+    this.emitter = new Emitter<QueueEvents>(
+      (error) => this.config.logger?.error('audioq: error in event listener', error),
+      (event, channel, payload) => {
+        if (this.config.debug && event !== 'progress') {
+          this.config.logger?.debug?.(`audioq [channel ${String(channel)}] ${event}`, payload);
+        }
+      }
     );
     this.syncVisibilityListener();
   }
@@ -1212,7 +1217,8 @@ export class QueueEngine {
   }
 
   protected emitQueueChange(channel: Channel): void {
-    if (!this.emitter.has('queuechange', channel.channelNumber)) return;
+    // Snapshots are only built for someone: a listener, or the debug log.
+    if (!this.config.debug && !this.emitter.has('queuechange', channel.channelNumber)) return;
     this.emitter.emit('queuechange', channel.channelNumber, this.snapshot(channel));
   }
 

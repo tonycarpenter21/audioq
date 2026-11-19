@@ -19,7 +19,10 @@ export class Emitter<Events extends object> {
   /**
    * @param onListenerError - Called when a listener throws; the error never reaches the emitter
    */
-  constructor(private readonly onListenerError: (error: unknown) => void) {}
+  constructor(
+    private readonly onListenerError: (error: unknown) => void,
+    private readonly onEmit?: (event: keyof Events, channel: number, payload: unknown) => void
+  ) {}
 
   /**
    * Adds a listener.
@@ -104,6 +107,7 @@ export class Emitter<Events extends object> {
    * @param payload - Value passed to listeners
    */
   emit<K extends keyof Events>(event: K, channel: number, payload: Events[K]): void {
+    this.onEmit?.(event, channel, payload);
     const set = this.listeners.get(event);
     if (!set || set.size === 0) return;
     for (const registration of [...set] as Registration<Events[K]>[]) {

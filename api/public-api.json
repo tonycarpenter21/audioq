@@ -265,7 +265,7 @@
   },
   "Logger": {
     "kind": "interface",
-    "signature": "{ error: (...args: unknown[]) => void; warn: (...args: unknown[]) => void }"
+    "signature": "{ debug?: ((...args: unknown[]) => void) | undefined; error: (...args: unknown[]) => void; warn: (...args: unknown[]) => void }"
   },
   "MAX_CHANNELS": {
     "kind": "const",
@@ -393,7 +393,7 @@
   },
   "QueueConfig": {
     "kind": "interface",
-    "signature": "{ defaultMaxQueueSize?: number | undefined; dropOldestWhenFull: boolean; historySize: number; loadTimeoutMs: number; logger: Logger | null; maxChannels: number; pauseWhenHidden: boolean; prefetchCount: number; showQueueWarnings: boolean; webAudio: WebAudioMode }"
+    "signature": "{ debug: boolean; defaultMaxQueueSize?: number | undefined; dropOldestWhenFull: boolean; historySize: number; loadTimeoutMs: number; logger: Logger | null; maxChannels: number; pauseWhenHidden: boolean; prefetchCount: number; showQueueWarnings: boolean; webAudio: WebAudioMode }"
   },
   "QueuedAudio": {
     "kind": "interface",

@@ -187,6 +187,8 @@ export interface AudioQueueOptions {
 
 /** Minimal logger interface used for library warnings. */
 export interface Logger {
+  /** Logs queue events when `debug` is on (console.debug by default). */
+  debug?: ((...args: unknown[]) => void) | undefined;
   /** Logs an error (listener exceptions). */
   error: (...args: unknown[]) => void;
   /** Logs a warning (queue limits). */
@@ -195,6 +197,11 @@ export interface Logger {
 
 /** Configuration for an audio queue instance. */
 export interface QueueConfig {
+  /**
+   * Log every queue event (except progress) through `logger.debug`, with its channel and payload:
+   * for finding out why a sound did not play. Off by default.
+   */
+  debug: boolean;
   /** Default maximum items per channel, including the playing item. Unlimited when undefined. */
   defaultMaxQueueSize?: number | undefined;
   /** When a channel is full, drop the oldest waiting item instead of rejecting the new one. */

@@ -669,3 +669,45 @@ describe('muting', () => {
     expect(queue.isMuted()).toBe(false);
   });
 });
+
+describe('debug log', () => {
+  const debugLines = (debug: jest.Mock): string[] =>
+    (debug.mock.calls as unknown[][]).map((call) => String(call[0]));
+
+  test('debug: true logs every event but progress, with channel and payload', async () => {
+    const debug = jest.fn();
+    const queue = setup({ debug: true, logger: { debug, error: jest.fn(), warn: jest.fn() } });
+    await queue.queueAudio('/a.mp3', 1);
+    await flush();
+    audioAt(0).tick(1);
+    audioAt(0).finish();
+    await flush();
+    const lines = debugLines(debug);
+    expect(lines).toContain('audioq [channel 1] queuechange');
+    expect(lines).toContain('audioq [channel 1] start');
+    expect(lines).toContain('audioq [channel 1] complete');
+    expect(lines.some((line) => line.includes('progress'))).toBe(false);
+    const complete = (debug.mock.calls as unknown[][]).find(
+      (call) => call[0] === 'audioq [channel 1] complete'
+    );
+    expect(complete?.[1]).toMatchObject({ fileName: 'a.mp3', reason: 'ended' });
+  });
+
+  test('is off by default, and can be switched on later', async () => {
+    const debug = jest.fn();
+    const queue = setup({ logger: { debug, error: jest.fn(), warn: jest.fn() } });
+    expect(queue.getQueueConfig().debug).toBe(false);
+    await queue.queueAudio('/a.mp3');
+    expect(debug).not.toHaveBeenCalled();
+    queue.setQueueConfig({ debug: true });
+    await queue.queueAudio('/b.mp3');
+    expect(debugLines(debug)).toContain('audioq [channel 0] queuechange');
+  });
+
+  test('loggers without debug, and no logger, are fine', async () => {
+    await expect(
+      setup({ debug: true, logger: { error: jest.fn(), warn: jest.fn() } }).queueAudio('/a.mp3')
+    ).resolves.toBeDefined();
+    await expect(setup({ debug: true, logger: null }).queueAudio('/a.mp3')).resolves.toBeDefined();
+  });
+});

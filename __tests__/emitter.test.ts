@@ -61,6 +61,13 @@ describe('Emitter', () => {
     expect(b).toHaveBeenCalled();
   });
 
+  test('onEmit sees every emitted event, even without listeners', () => {
+    const onEmit = jest.fn();
+    const emitter: Emitter<{ ping: number }> = new Emitter(jest.fn(), onEmit);
+    emitter.emit('ping', 3, 42);
+    expect(onEmit).toHaveBeenCalledWith('ping', 3, 42);
+  });
+
   test('off matches a custom key when the callback was wrapped', () => {
     const { emitter } = make();
     const original = jest.fn<undefined, [number]>();

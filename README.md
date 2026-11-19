@@ -485,6 +485,7 @@ All Web Audio routing shares one `AudioContext`, closed by `destroyAllChannels()
 
 | Option                | Default   | Description                                                     |
 | --------------------- | --------- | --------------------------------------------------------------- |
+| `debug`               | `false`   | Log every event (except progress) via `logger.debug`.           |
 | `defaultMaxQueueSize` | unlimited | Items per channel, including the playing one.                   |
 | `dropOldestWhenFull`  | `false`   | Drop the oldest waiting item instead of rejecting a new one.    |
 | `historySize`         | `20`      | Finished items remembered per channel for `getHistory`.         |
@@ -495,6 +496,17 @@ All Web Audio routing shares one `AudioContext`, closed by `destroyAllChannels()
 | `prefetchCount`       | `1`       | Waiting items to preload ahead of the current one.              |
 | `showQueueWarnings`   | `true`    | Warn when a queue limit is reached.                             |
 | `webAudio`            | `'auto'`  | `'auto'`, `'force'` or `'off'` (see iOS).                       |
+
+### Debugging
+
+When a sound does not play, turn on the debug log: every event (queued, started, paused,
+failed, completed and why, cues) is logged with its channel and payload.
+
+```ts
+setQueueConfig({ debug: true });
+// audioq [channel 0] queuechange { items: [...], totalItems: 1, ... }
+// audioq [channel 0] error { errorType: 'autoplay-blocked', ... }
+```
 
 ## Browser support
 

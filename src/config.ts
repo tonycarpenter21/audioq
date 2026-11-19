@@ -8,6 +8,7 @@ import type { FadeConfig, Logger, QueueConfig, VolumeConfig } from './types.js';
 
 /** Logger that writes to the browser console. */
 export const consoleLogger: Logger = {
+  debug: (...args: unknown[]): void => console.debug(...args),
   error: (...args: unknown[]): void => console.error(...args),
   warn: (...args: unknown[]): void => console.warn(...args)
 };
@@ -33,6 +34,7 @@ export const DEFAULT_DUCK_TRANSITION_MS: number = 250;
  * @returns A fresh copy of the defaults
  */
 export const defaultQueueConfig = (): QueueConfig => ({
+  debug: false,
   defaultMaxQueueSize: undefined,
   dropOldestWhenFull: false,
   historySize: 20,

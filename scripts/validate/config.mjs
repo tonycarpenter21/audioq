@@ -19,7 +19,7 @@ export const validationConfig = {
   bundle: {
     cjsGzipBytes: 20 * 1024,
     esmGzipBytes: 20 * 1024,
-    minifiedFullGzipBytes: 13 * 1024,
+    minifiedFullGzipBytes: 14 * 1024,
     minifiedQueueAudioOnlyGzipBytes: 10 * 1024
   },
 

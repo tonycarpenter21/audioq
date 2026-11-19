@@ -17,6 +17,7 @@ Done in 3.0:
 - Muting that keeps volumes: `setMuted`, `setChannelMuted`
 - Stereo panning: `setChannelPan`
 - Visualizer data: `getChannelAnalyser`
+- Debug event log: `debug` config
 
 Not planned as APIs (a timer does it; recipes are in the README):
 - Sleep timer
@@ -27,9 +28,6 @@ Potential New Package Features:
   heavy; specialist libraries like gapless-5 do this). `setCrossfade(channel, 50)` hides the
   small gap between items for most music.
 - Accessibility - audio descriptions (a second channel with ducking already covers most uses)
-
-Potential New Dev Features:
-- Debug and analytics mode
 
 Needs real-device testing:
 - iOS Safari: preloaded files (blob: URLs) play, including ones served as application/octet-stream

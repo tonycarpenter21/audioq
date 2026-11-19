@@ -46,6 +46,7 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   cues report enter and exit, point cues fire once; timed precisely and follow seeks.
   `parseWebVtt` turns a .vtt caption file into cues (tree-shakable).
 - **Crossfade**: `setCrossfade(channel, ms)` overlaps consecutive items.
+- **Debug log**: `setQueueConfig({ debug: true })` logs every queue event through `logger.debug`.
 - **Visualizer data**: `getChannelAnalyser(channel)` returns an `AnalyserNode` for frequency and
   waveform data.
 - **Stereo panning**: `setChannelPan`/`getChannelPan` (-1 left to 1 right), through Web Audio.
