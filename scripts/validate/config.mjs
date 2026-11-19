@@ -17,8 +17,8 @@ export const validationConfig = {
    * and an app that only imports queueAudio.
    */
   bundle: {
-    cjsGzipBytes: 14 * 1024,
-    esmGzipBytes: 14 * 1024,
+    cjsGzipBytes: 16 * 1024,
+    esmGzipBytes: 16 * 1024,
     minifiedFullGzipBytes: 10 * 1024,
     minifiedQueueAudioOnlyGzipBytes: 9 * 1024
   },

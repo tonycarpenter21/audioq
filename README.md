@@ -168,6 +168,25 @@ clearHistory(0);
 so the whole queue repeats. History keeps the last `historySize` items per channel (20 by
 default).
 
+## Lock screen and media controls
+
+`connectMediaSession` shows a channel's current item on the lock screen, in media notifications
+and in the browser's media hub, using the item's `metadata` (title, artist, album, artwork), and
+wires up their play, pause, stop, next, previous and seek buttons. It is a separate function, so
+apps that do not use it do not ship it.
+
+```ts
+const disconnect = connectMediaSession({ channel: 0, seekOffsetMs: 15000 });
+await queueAudio('/episodes/42.mp3', 0, {
+  metadata: {
+    artist: 'My Podcast',
+    artwork: [{ sizes: '512x512', src: '/art/42.png', type: 'image/png' }],
+    title: 'Episode 42'
+  }
+});
+disconnect(); // when the player unmounts
+```
+
 ## Pause, resume and fades
 
 ```ts

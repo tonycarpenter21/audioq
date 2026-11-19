@@ -9,6 +9,8 @@
 export { AudioQueue, createAudioQueue } from './audio-queue.js';
 export { PLAYBACK_RATE_RANGE, getFadeConfig } from './config.js';
 export * from './default-queue.js';
+export { connectMediaSession } from './media-session.js';
+export type { MediaSessionOptions } from './media-session.js';
 export { extractFileName } from './utils.js';
 export { isIOSDevice, isWebAudioSupported } from './web-audio.js';
 

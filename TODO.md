@@ -1,19 +1,31 @@
+Done in 3.0:
+- Audio seeking: `seekTo`, `seekBy`, `startAt`
+- Repeat entire queue: `setRepeatMode(channel, 'all')` (and `'one'`)
+- Playback speed control without pitch change: `setPlaybackRate`, item `playbackRate`
+- Shuffle mode: `shuffleQueue`
+- Delayed playback between tracks: `setChannelGap`
+- History with completion info: `getHistory` (`reason`, `playedMs`, `finishedAt`)
+- Media Session API: `connectMediaSession`
+- Loading state: `AudioInfo.isLoading`
+- Memory management: elements only for the playing and next items, released when they leave
+- Playlist helpers: `metadata`, `interrupt`, `dedupeMs`, Blob/File sources, `pauseWhenHidden`
+
+Not planned as APIs (a timer does it; recipes are in the README):
+- Sleep timer
+- Scheduled playback at a predetermined time
+
 Potential New Package Features:
-- Crossfade/setFadeConfig
-- Audio seeking (seekTo, seekByPercent)
-- Playlist management helpers 
-- Repeat entire queue
-- Playback Speed Control - 0.5x, 1.5x, 2x speed without pitch change
-- Shuffle Mode - Randomize playback order within channels
-- Scheduled Playback - Play specific audio at predetermined times
-- Delayed Playback - Add configurable delays between tracks
-- Sleep Timer - Auto-pause/stop after specified duration
-- History - past audio files played in each channel with props like wasCompleted
-- Accessibility - Screen reader integration, audio descriptions, closed captions
-- Media Session API - Native browser media controls and notifications
+- Crossfade between items (needs two elements playing at once per channel)
+- Gapless playback (Web Audio buffer scheduling)
+- Accessibility - audio descriptions, closed captions (cue events from item metadata)
+- Audio sprites (many short sounds in one file)
 
 Potential New Dev Features:
 - Debug and analytics mode
-- Loading state management APIs
-- Caching system
-- Memory Management - Research automatic cleanup of unused audio buffers
+- Caching system (the browser HTTP cache already covers most cases; revisit for offline apps)
+
+Needs real-device testing:
+- iOS Safari: whether every new audio element needs its own user gesture (if so, keep a small
+  pool of elements unlocked on the first tap, like Howler does)
+- iOS: AudioContext "interrupted" state after phone calls and Siri
+- Android Chrome: deferred media loading in background tabs vs `loadTimeoutMs`

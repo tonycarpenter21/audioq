@@ -56,6 +56,15 @@ of failing later with a `TypeError`.
 unaffected. `off*(channel)` still removes every listener of that kind on the channel;
 `off*(channel, callback)` now removes just one.
 
+**An item that ends or fails while the channel is paused keeps the channel paused.** In 2.x the
+next item started playing although the user had paused. Skipping with
+`stopCurrentAudioInChannel` still starts the next item.
+
+**Browser support starts at 2020** (ES2020): Chrome and Edge 80, Firefox 74, Safari 13.1.
+
+**Stopping and destroying take effect immediately**, even if you do not `await` them (handy in
+React effect cleanups). `destroyAllChannels` also resets the global volume to 1.
+
 **Item elements are created lazily.** Only the playing item and the next one (`prefetchCount`) are
 loaded. Nothing changes for you unless you relied on every file downloading immediately.
 
@@ -80,7 +89,10 @@ loaded. Nothing changes for you unless you relied on every file downloading imme
 
 - `createAudioQueue(config)` and `getDefaultAudioQueue()` for independent queues.
 - `unlockAudio()` to start blocked audio from your own click handler.
-- Config options `loadTimeoutMs`, `prefetchCount`, `logger`, `maxChannels`, `webAudio`.
-- Item option `crossOrigin`.
+- Config options `loadTimeoutMs`, `prefetchCount`, `logger`, `maxChannels`, `webAudio`,
+  `historySize`, `pauseWhenHidden`.
+- Item options `crossOrigin`, `metadata`, `interrupt`, `dedupeMs`, `playbackRate`, `startAt`.
+- `Blob`/`File` sources, `seekTo`, `seekBy`, `setPlaybackRate`, `setRepeatMode`, `shuffleQueue`,
+  `setChannelGap`, `getHistory`, and `connectMediaSession` for lock-screen controls.
 - Importing the package has no side effects (safe for SSR), and the package ships both ES modules
   and CommonJS.

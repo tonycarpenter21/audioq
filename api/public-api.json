@@ -83,6 +83,10 @@
     "kind": "type",
     "signature": "'ended' | 'stopped' | 'error'"
   },
+  "connectMediaSession": {
+    "kind": "function",
+    "signature": "(options?: MediaSessionOptions) => Unsubscribe"
+  },
   "createAudioQueue": {
     "kind": "function",
     "signature": "(config?: Partial<QueueConfig>) => AudioQueue"
@@ -206,6 +210,10 @@
   "MAX_CHANNELS": {
     "kind": "const",
     "signature": "number"
+  },
+  "MediaSessionOptions": {
+    "kind": "interface",
+    "signature": "{ channel?: number | undefined; queue?: AudioQueue | undefined; seekOffsetMs?: number | undefined }"
   },
   "offAudioComplete": {
     "kind": "function",

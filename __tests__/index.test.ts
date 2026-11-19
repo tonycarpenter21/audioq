@@ -9,6 +9,7 @@ describe('package entry point', () => {
 
   test('exports the top-level functions bound to the default queue', () => {
     expect(typeof audioq.queueAudio).toBe('function');
+    expect(typeof audioq.connectMediaSession).toBe('function');
     expect(typeof audioq.getDefaultAudioQueue).toBe('function');
   });
 

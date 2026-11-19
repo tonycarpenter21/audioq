@@ -26,8 +26,24 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
 - `AudioCompleteInfo.reason` (`'ended' | 'stopped' | 'error'`), `QueueItem.id`,
   `AudioErrorType.AutoplayBlocked`, `crossOrigin` item option, `logger` and `maxChannels` config.
 - Dual ESM + CommonJS build with an `exports` map and `sideEffects: false` (tree-shakable).
-  About 10 KB gzipped, down from about 30 KB.
-- `npm run validate:all`: 32 validation gates with reports in `.validation-reports/`.
+  About 9 KB minified and gzipped with every feature, down from about 30 KB gzipped in 2.x.
+- **Blob and File sources**: `queueAudio(blob)` for fetched or generated audio (text-to-speech);
+  object URLs are created and revoked for you.
+- **Item metadata** (`metadata` option): title, artist, artwork and any fields of your own,
+  returned with every event, snapshot, `getCurrentAudioInfo` and history entry.
+- **`interrupt`** (stop and clear the channel, then play now) and **`dedupeMs`** (ignore repeats of
+  the same sound within a window, for notification bursts) options.
+- **Playback controls**: `seekTo`, `seekBy`, `setPlaybackRate`/`getPlaybackRate` (0.25-4, pitch
+  preserved; item rate × channel rate), `startAt` option, `setRepeatMode` (`'off' | 'one' |
+  'all'`), `shuffleQueue`, `setChannelGap` (silence between items), `getHistory`/`clearHistory`
+  (`historySize` config).
+- **`connectMediaSession`**: lock-screen and media-notification controls (tree-shakable).
+- **OS pause/play detection**: when a phone call, unplugged headphones, the lock screen or Control
+  Center pauses or plays audio, the channel state follows and pause/resume events fire.
+- **`pauseWhenHidden`** config, `isLoading` and `playbackRate` in `AudioInfo`, `id` and
+  `metadata` in every payload, `playedMs` in completion payloads.
+- `npm run validate:all`: 35 validation gates with reports in `.validation-reports/`, run by CI
+  on every push and pull request (Node 20, 22 and 24).
 
 ### Fixed
 - Errors were handled twice per failure, scheduling duplicate retries; a failing *waiting* item
@@ -55,6 +71,20 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   the URL check. The check gave no protection (audio elements never execute script URLs).
 - File names in events were HTML-escaped (`rock &amp; roll.mp3` showed literally in React and Vue).
 - Changelog dates for 2.0.0, 1.4.0 and 1.6.0-1.12.0 corrected from the git history.
+
+### Changed (breaking)
+- Requires browsers from 2020 onwards (ES2020: Chrome/Edge 80, Firefox 74, Safari 13.1).
+- An item that ends or fails while its channel is paused (or while a pause is fading out) leaves
+  the channel paused on the next item; skipping with `stopCurrentAudioInChannel` still plays the
+  next item.
+- `resumeChannel`, `togglePauseChannel` and the fade toggles cancel a pause that is still fading
+  out.
+- `stopAllAudio`, `destroyChannel` and `destroyAllChannels` take effect immediately, even without
+  `await`; `destroyAllChannels` also resets the global volume.
+- Blocked autoplay is retried on `mousedown`, `keydown`, `pointerup` and `touchend` (the events
+  that grant permission to play), and reported once per item.
+- `loadTimeoutMs` must be at most 2147483647 (timers cannot wait longer); the per-call
+  `maxQueueSize` must be at least 1.
 
 ### Removed (breaking)
 - Automatic retry system: `setRetryConfig`, `getRetryConfig`, `retryFailedAudio`,
