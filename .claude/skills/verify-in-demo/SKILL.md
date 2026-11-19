@@ -12,6 +12,7 @@ Until a version is published, test the library through a packed tarball.
 
 ```bash
 npm run validate:all
+mkdir -p /tmp/audioq-pack   # npm pack does not create the folder
 npm pack --pack-destination /tmp/audioq-pack
 ```
 
