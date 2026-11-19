@@ -18,6 +18,7 @@ const byId = new Map(
 const ORDER = [
   // repository and metadata
   'git-hygiene',
+  'ci-workflow',
   'package-metadata',
   'lockfile-sync',
   'dependency-audit',
