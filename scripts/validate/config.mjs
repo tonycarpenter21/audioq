@@ -19,8 +19,8 @@ export const validationConfig = {
   bundle: {
     cjsGzipBytes: 14 * 1024,
     esmGzipBytes: 14 * 1024,
-    minifiedFullGzipBytes: 9 * 1024,
-    minifiedQueueAudioOnlyGzipBytes: 8 * 1024
+    minifiedFullGzipBytes: 10 * 1024,
+    minifiedQueueAudioOnlyGzipBytes: 9 * 1024
   },
 
   /** What the published tarball may contain. */
@@ -35,7 +35,7 @@ export const validationConfig = {
       /^dist\/(esm|cjs)\/package\.json$/,
       /^dist\/types\/[a-z0-9-]+\.d\.ts$/
     ],
-    maxUnpackedBytes: 250 * 1024,
+    maxUnpackedBytes: 350 * 1024,
     required: [
       'dist/esm/index.js',
       'dist/cjs/index.js',

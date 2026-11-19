@@ -134,6 +134,24 @@ export const toolingGates = [
   },
   {
     category: 'package',
+    dependsOn: ['build'],
+    description:
+      'The public-API test suites pass against the BUILT package (dist/cjs), so the shipped code ' +
+      'is tested too, including build-time transforms like renamed internals.',
+    id: 'dist-tests',
+    run: async () => {
+      const result = await runCommand('jest', ['--ci', '-c', 'jest.dist.config.js']);
+      const totals = result.output.match(/Tests:\s+(.*)/);
+      return fromCommand(
+        result,
+        `Built package passes (${totals ? totals[1] : 'see log'})`,
+        `Built package fails tests (${totals ? totals[1] : 'see log'})`
+      );
+    },
+    title: 'Tests against the built package'
+  },
+  {
+    category: 'package',
     description: 'scripts/build.mjs produces dist/esm, dist/cjs and dist/types.',
     id: 'build',
     run: async () => {

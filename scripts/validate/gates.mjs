@@ -52,6 +52,7 @@ const ORDER = [
   'coverage-per-file',
   // build output
   'build',
+  'dist-tests',
   'package-exports',
   'ssr-import',
   'bundle-size',

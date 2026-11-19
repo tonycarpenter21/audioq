@@ -347,8 +347,9 @@ All Web Audio routing shares one `AudioContext`, closed by `destroyAllChannels()
 
 ## Browser support
 
-Any browser with ES2017 and `HTMLAudioElement`: Chrome, Edge, Firefox and Safari from 2017
-onwards, plus their mobile versions. Node.js is supported for importing (SSR) but not for playback.
+Browsers from 2020 onwards (ES2020 and `HTMLAudioElement`): Chrome and Edge 80+, Firefox 74+,
+Safari 13.1+ and their mobile versions. Node.js is supported for importing (SSR) but not for
+playback.
 
 ## Development
 

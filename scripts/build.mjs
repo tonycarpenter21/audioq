@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mangleDist } from './mangle.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -23,4 +24,5 @@ for (const [folder, type] of [
   mkdirSync(join(dist, folder), { recursive: true });
   writeFileSync(join(dist, folder, 'package.json'), `${JSON.stringify({ type }, null, 2)}\n`);
 }
-console.log('Built dist/esm, dist/cjs and dist/types');
+const { names } = await mangleDist();
+console.log(`Built dist/esm, dist/cjs and dist/types (${names.length} internal names shortened)`);
