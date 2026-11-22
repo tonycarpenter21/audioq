@@ -51,7 +51,11 @@ Demo conventions:
 - A tab shows only the channels that have examples. Group related buttons into small tabs
   rather than growing one tab: shared buttons are named controls composed per tab (see
   `playlistControls` in `v3Examples.ts`).
-- Developer tools (the audioq event log) live in the on-page debug console, not on a tab.
+- Live panels (now playing, captions, spectrums) go in `beside` in `tabComponentConfig.tsx`:
+  they stay in view next to the controls, and become a mini player on phones. Settings the
+  buttons use go in `above`.
+- Developer tools (the audioq event log) live in the on-page debug console, not on a tab;
+  buttons whose result is a log call `showDebugConsole()`.
 - Read channel state with the `useChannel` hook (createChannelStore), not polling.
 - Settings a tab changes must be reset in `performFullCleanup` (src/App.tsx) or the tab
   component's cleanup.
@@ -67,6 +71,11 @@ Examples compile against the built types, every page is in the sidebar, the tsco
 strict, the site's own code type-checks, and the build fails on broken links and anchors.
 
 ## 5. Hand over for device QA
+
+`npm run phone` in the demo builds it, serves it on every network interface (with HTTP Range
+support) and prints the addresses to open on a phone on the same Wi-Fi. Prefer it over
+`npm start`, whose network address detection fails on some machines (Windows with virtual
+adapters).
 
 Tell the user what to try on a phone; iOS behaviour (autoplay, volume through Web Audio, lock
 screen) cannot be tested in Chromium. Open questions are listed under "Needs real-device
