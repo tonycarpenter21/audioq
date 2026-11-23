@@ -96,6 +96,8 @@ const POSITION_EVENTS: readonly string[] = [
 ];
 /** How close to `endAt` counts as reaching it (timers and media clocks are not exact). */
 const END_TOLERANCE_MS = 10;
+/** Released elements kept for reuse when the browser refuses to start a new one (iOS). */
+const MAX_SPARE_ELEMENTS = 4;
 /** How far from `startAt` playback may begin before the seek is considered failed. */
 const START_TOLERANCE_MS = 250;
 
@@ -158,6 +160,10 @@ export class QueueEngine {
   protected unlockArmed: boolean = false;
   protected visibilityArmed: boolean = false;
   protected readonly webAudio: WebAudioEngine = new WebAudioEngine();
+  /** Elements that have played: iOS lets them play again without a user gesture. */
+  protected readonly trustedElements: WeakSet<HTMLAudioElement> = new WeakSet();
+  /** Released trusted elements, for items the browser refuses to start (see onPlayRejected). */
+  protected spareElements: HTMLAudioElement[] = [];
 
   /**
    * @param config - Configuration overrides; see {@link QueueConfig}
@@ -302,6 +308,7 @@ export class QueueEngine {
       id: this.nextId++,
       lastCueMs: -1,
       loadTimer: undefined,
+      onSpareElement: false,
       playRequested: false,
       positionTimer: undefined,
       resolveFinished,
@@ -378,14 +385,20 @@ export class QueueEngine {
     this.updateDucking();
   }
 
-  protected ensureElement(channel: Channel, item: Item): HTMLAudioElement {
+  protected ensureElement(
+    channel: Channel,
+    item: Item,
+    reuse?: HTMLAudioElement
+  ): HTMLAudioElement {
     if (item.element) return item.element;
-    const element = new Audio();
+    const element = reuse ?? new Audio();
     element.preload = 'auto';
     // Segments (endAt) loop themselves; a native loop would replay the whole file.
     element.loop = item.loop && item.endAt === undefined;
     element.preservesPitch = true;
-    if (item.crossOrigin !== undefined) element.crossOrigin = item.crossOrigin;
+    element.muted = false;
+    element.volume = 1;
+    element.crossOrigin = item.crossOrigin ?? null;
     element.src = item.objectUrl ?? item.src;
     item.element = element;
     const whenHead =
@@ -515,7 +528,27 @@ export class QueueEngine {
     );
   }
 
+  /**
+   * iOS only lets an audio element play without a user gesture if it has played before, so an
+   * item that starts after the previous one ended (not during a tap) can be refused. Moving it onto
+   * a released element that has played, and retrying once, lets queues keep going.
+   * @returns Whether a retry was started
+   */
+  protected retryOnSpareElement(channel: Channel, item: Item): boolean {
+    const spare = this.spareElements.pop();
+    if (!spare || item.onSpareElement) {
+      if (spare) this.spareElements.push(spare);
+      return false;
+    }
+    item.onSpareElement = true;
+    this.unload(item);
+    this.ensureElement(channel, item, spare);
+    void this.play(channel, item);
+    return true;
+  }
+
   protected onPlaying(channel: Channel, item: Item): void {
+    if (item.element) this.trustedElements.add(item.element);
     item.blocked = false;
     this.clearLoadTimer(item);
     if (!this.hasBlockedItems()) this.disarmUnlock();
@@ -537,6 +570,7 @@ export class QueueEngine {
     if (channel.head !== item || item.settled || channel.paused) return;
     const type = categorizePlayError(error);
     if (type === null) return; // play() was interrupted by pause() or a source change
+    if (type === AudioErrorType.AutoplayBlocked && this.retryOnSpareElement(channel, item)) return;
     if (type === AudioErrorType.AutoplayBlocked) {
       this.clearLoadTimer(item);
       if (!item.blocked) {
@@ -857,9 +891,14 @@ export class QueueEngine {
     item.positionTimer = undefined;
     item.disposers.forEach((dispose) => dispose());
     item.disposers = [];
+    const element = item.element;
+    // A trusted element can be reused, unless Web Audio owns its output for good.
+    const reusable = element !== undefined && !item.route && this.trustedElements.has(element);
     if (item.route) this.webAudio.disconnect(item.route);
     item.route = undefined;
-    if (item.element) releaseElement(item.element);
+    if (element) releaseElement(element);
+    if (reusable && this.spareElements.length < MAX_SPARE_ELEMENTS)
+      this.spareElements.push(element);
     item.element = undefined;
     item.playRequested = false;
   }

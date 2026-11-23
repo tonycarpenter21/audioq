@@ -470,7 +470,9 @@ iOS ignores `HTMLAudioElement.volume`, so volume, fades and ducking there need t
 With `webAudio: 'auto'` (the default) audioq routes a sound through it only while its volume is
 between silent and full, or when its channel is panned or analysed. Audio at full volume stays
 native, because on iOS routed audio loses lock-screen and background playback and can drift out of
-sync on pause. Muting uses the element's `muted` flag, which iOS honours. Cross-origin files are
+sync on pause. Muting uses the element's `muted` flag, which iOS honours. iOS also refuses to
+start a new audio element outside a tap, so when the next item in a queue is refused, audioq moves
+it onto an element that has already played (iOS lets those play again) and retries. Cross-origin files are
 only routed if you queue them with `crossOrigin: 'anonymous'` and the server sends CORS headers;
 otherwise they play at full volume rather than silently.
 

@@ -86,6 +86,9 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   from an earlier pause point (WebKit bugs). Routing is now used only while a sound's volume is
   between silent and full (or it is panned or analysed); muting uses the element's `muted` flag;
   routed items are re-seeked on resume.
+- On iOS, queued items after the first one or two could refuse to play (iOS only lets an element
+  play without a tap if it has played before). A refused item is now moved onto a released element
+  that has played, and retried.
 - A new `AudioContext` was created per channel and never closed. One shared context is now created
   only when needed and closed by `destroyAllChannels()`.
 - Every queued item started downloading immediately; finished, stopped and removed items kept their

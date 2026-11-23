@@ -501,6 +501,84 @@ describe('errors', () => {
 });
 
 describe('autoplay blocking', () => {
+  describe('reusing elements that have played (iOS refuses new ones outside a tap)', () => {
+    const playThenRefuseNew = async (queue: AudioQueue, ...files: string[]): Promise<void> => {
+      for (const file of files) await queue.queueAudio(file);
+      await flush();
+      audioAt(0).playBehavior = 'resolve'; // it played, so the browser keeps allowing it
+      FakeAudio.defaultPlayBehavior = 'not-allowed'; // new elements are refused from now on
+      audioAt(0).finish();
+      await flush();
+    };
+
+    test('a refused item moves onto an element that has played, and plays', async () => {
+      const queue = setup();
+      const errors = jest.fn();
+      queue.onAudioError(0, errors);
+      await playThenRefuseNew(queue, '/a.mp3', '/b.mp3');
+      expect(audioAt(0).src).toMatch(/\/b\.mp3$/);
+      expect(audioAt(0).playCalls).toBe(2);
+      expect(queue.getCurrentAudioInfo()?.fileName).toBe('b.mp3');
+      expect(queue.getCurrentAudioInfo()?.isPlaying).toBe(true);
+      expect(errors).not.toHaveBeenCalled();
+    });
+
+    test('the reused element starts clean: unmuted, full volume, the new item looping or not', async () => {
+      const queue = setup();
+      await queue.queueAudio('/a.mp3');
+      await queue.queueAudio('/b.mp3', 0, { loop: true });
+      await flush();
+      audioAt(0).muted = true;
+      audioAt(0).playBehavior = 'resolve';
+      FakeAudio.defaultPlayBehavior = 'not-allowed';
+      audioAt(0).finish();
+      await flush();
+      expect(audioAt(0).src).toMatch(/\/b\.mp3$/);
+      expect(audioAt(0).muted).toBe(false);
+      expect(audioAt(0).loop).toBe(true);
+    });
+
+    test('if the reused element is refused too, the item waits for a tap (one error)', async () => {
+      const queue = setup();
+      const errors = jest.fn();
+      queue.onAudioError(0, errors);
+      await playThenRefuseNew(queue, '/a.mp3', '/b.mp3');
+      // a reused element can be refused as well (for example after the page was backgrounded)
+      await queue.stopAllAudioInChannel(0);
+      audioAt(0).playBehavior = 'not-allowed';
+      await queue.queueAudio('/c.mp3');
+      await flush();
+      expect(errors).toHaveBeenCalledTimes(1);
+      expect(callArg(errors)).toMatchObject({
+        errorType: AudioErrorType.AutoplayBlocked,
+        fileName: 'c.mp3'
+      });
+    });
+
+    test('elements routed through Web Audio are not reused', async () => {
+      installFakeAudioContext();
+      const queue = setup({ webAudio: 'force' });
+      const errors = jest.fn();
+      queue.onAudioError(0, errors);
+      await playThenRefuseNew(queue, '/a.mp3', '/b.mp3');
+      expect(callArg(errors)).toMatchObject({
+        errorType: AudioErrorType.AutoplayBlocked,
+        fileName: 'b.mp3'
+      });
+    });
+
+    test('destroyAllChannels forgets the spare elements', async () => {
+      const queue = setup();
+      const errors = jest.fn();
+      await playThenRefuseNew(queue, '/a.mp3');
+      await queue.destroyAllChannels();
+      queue.onAudioError(0, errors);
+      await queue.queueAudio('/b.mp3');
+      await flush();
+      expect(callArg(errors)).toMatchObject({ errorType: AudioErrorType.AutoplayBlocked });
+    });
+  });
+
   test('keeps the queue, reports once, and plays on the next user gesture', async () => {
     FakeAudio.defaultPlayBehavior = 'not-allowed';
     const queue = setup();

@@ -31,7 +31,10 @@ Potential New Package Features:
 
 Needs real-device testing:
 - iOS Safari: preloaded files (blob: URLs) play, including ones served as application/octet-stream
-- iOS Safari: whether every new audio element needs its own user gesture (if so, keep a small
-  pool of elements unlocked on the first tap, like Howler does)
+- iOS Safari: queues of short clips keep playing (a refused item moves onto an element that has
+  played; confirm on a device)
 - iOS: AudioContext "interrupted" state after phone calls and Siri
+- iOS lock screen: scrubbing while paused, then play, glitched (seen once; needs a debug log)
+- iOS lock screen: paused playback started again when Messages was opened (needs a debug log
+  to tell an OS-initiated play from a media-session action)
 - Android Chrome: deferred media loading in background tabs vs `loadTimeoutMs`

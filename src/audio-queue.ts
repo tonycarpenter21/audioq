@@ -220,6 +220,7 @@ export class AudioQueue extends QueueEngine {
     this.globalMuted = false;
     this.disarmUnlock();
     this.webAudio.close();
+    this.spareElements = [];
     forgetMemory(this);
   }
 

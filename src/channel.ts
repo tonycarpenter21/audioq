@@ -23,6 +23,8 @@ export interface Item {
   readonly activeCues: Set<number>;
   /** Set while the browser refuses playback until a user gesture. */
   blocked: boolean;
+  /** Moved onto a spare element after the browser refused to start its own (iOS); once only. */
+  onSpareElement: boolean;
   /** Channel number. */
   readonly channelNumber: number;
   /** CORS mode for the element. */

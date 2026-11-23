@@ -11,6 +11,7 @@ import { FakeAudio } from './helpers/fake-audio';
 const item = (overrides: Partial<Item> = {}): Item => ({
   activeCues: new Set(),
   blocked: false,
+  onSpareElement: false,
   channelNumber: 0,
   crossOrigin: undefined,
   cues: [],
