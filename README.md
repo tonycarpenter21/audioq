@@ -1,11 +1,14 @@
 # audioq
 
 Queue audio files on independent channels in the browser: play them in order, pause and resume
-with fades, duck background audio under a voice-over, and react to events. Zero dependencies,
-about 10 KB gzipped, TypeScript types included.
+with fades, duck background audio under a voice-over, and react to events. Playlists, audio
+sprites, captions, crossfades, preloading, lock-screen controls and visualizer data are built in,
+and it handles autoplay blocking and iOS quirks for you. Zero dependencies, about 10 KB gzipped,
+TypeScript types included.
 
 - 🎵 [Demo](https://tonycarpenter21.github.io/audio-queue-demo/queue-management)
-- 📚 [Docs](https://tonycarpenter21.github.io/audio-queue-docs/)
+- 📚 [Docs](https://tonycarpenter21.github.io/audio-queue-docs/) (also as
+  [llms.txt](https://tonycarpenter21.github.io/audio-queue-docs/llms.txt) for AI assistants)
 - 📦 [npm](https://www.npmjs.com/package/audioq)
 - Upgrading from 2.x? See [MIGRATION.md](MIGRATION.md).
 
