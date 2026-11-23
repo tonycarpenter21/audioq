@@ -69,8 +69,9 @@ export const describeWebAudioSupport = (mode: WebAudioMode): WebAudioSupport => 
   if (mode === 'off') reason = 'Web Audio disabled (webAudio: "off")';
   else if (!available) reason = 'Web Audio API not available in this environment';
   else if (mode === 'force') reason = 'Web Audio forced (webAudio: "force")';
-  else if (isIOS) reason = 'iOS detected: same-origin audio uses Web Audio for volume control';
-  else reason = 'Using HTMLAudioElement volume (Web Audio only needed on iOS)';
+  else if (isIOS) {
+    reason = 'iOS detected: audio uses Web Audio only while its volume is between 0 and 1';
+  } else reason = 'Using HTMLAudioElement volume (Web Audio only needed on iOS)';
   return { available, isIOS, reason, usingWebAudio };
 };
 

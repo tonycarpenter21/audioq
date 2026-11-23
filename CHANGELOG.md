@@ -82,6 +82,10 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   ducking was active were not ducked.
 - On iOS, cross-origin audio without CORS headers played as silence (Web Audio routing is now used
   only for same-origin sources or items with `crossOrigin` set).
+- On iOS, audio routed through Web Audio lost lock-screen and background playback, and could resume
+  from an earlier pause point (WebKit bugs). Routing is now used only while a sound's volume is
+  between silent and full (or it is panned or analysed); muting uses the element's `muted` flag;
+  routed items are re-seeked on resume.
 - A new `AudioContext` was created per channel and never closed. One shared context is now created
   only when needed and closed by `destroyAllChannels()`.
 - Every queued item started downloading immediately; finished, stopped and removed items kept their

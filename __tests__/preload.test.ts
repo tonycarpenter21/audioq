@@ -262,10 +262,12 @@ describe('preloaded items and the rest of the queue', () => {
     expect(urls.revoke).toHaveBeenCalledTimes(1);
   });
 
-  test('on iOS a preloaded file from a CORS-enabled CDN is routed through Web Audio', async () => {
+  test('on iOS a preloaded file from a CORS-enabled CDN can be routed through Web Audio', async () => {
     installFakeAudioContext();
     setUserAgent(IPHONE_UA);
     const queue = setup({ webAudio: 'auto' });
+    await queue.setChannelVolume(0, 0.5);
+    await queue.setChannelVolume(1, 0.5);
     const done = preloadAudio('https://cdn.other.com/music.mp3', queue);
     await flush();
     net.respond('https://cdn.other.com/music.mp3');

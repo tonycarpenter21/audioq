@@ -1283,14 +1283,59 @@ describe('Web Audio routing', () => {
     expect(audioAt(0).volume).toBe(1);
   });
 
-  test('auto mode on iOS routes same-origin audio but not cross-origin audio', async () => {
+  test('auto mode on iOS leaves full-volume audio native (lock screen and background play work)', async () => {
     setUserAgent(IPHONE_UA);
     const queue = setup({ webAudio: 'auto' });
-    await queue.queueAudio('/same-origin.mp3', 0);
-    await queue.queueAudio('https://cdn.other.com/x.mp3', 1);
+    await queue.queueAudio('/music.mp3', 0);
+    await flush();
+    expect(FakeAudioContext.instances).toHaveLength(0);
+  });
+
+  test('auto mode on iOS routes once the volume is between 0 and 1: same-origin and CORS only', async () => {
+    setUserAgent(IPHONE_UA);
+    const queue = setup({ webAudio: 'auto' });
+    await queue.queueAudio('/same-origin.mp3', 0, { volume: 0.5 });
+    await queue.queueAudio('https://cdn.other.com/x.mp3', 1, { volume: 0.5 });
     await queue.queueAudio('https://cors.other.com/y.mp3', 2, { crossOrigin: 'anonymous' });
     const context = FakeAudioContext.instances[0] as FakeAudioContext;
+    expect(context.sources).toHaveLength(1);
+    await queue.setChannelVolume(2, 0.3); // a playing item is routed when its volume changes
     expect(context.sources).toHaveLength(2);
+    expect(context.gains[1]?.gain.value).toBeCloseTo(0.3);
+  });
+
+  test('on iOS, muting uses the element muted flag instead of Web Audio', async () => {
+    setUserAgent(IPHONE_UA);
+    const queue = setup({ webAudio: 'auto' });
+    await queue.queueAudio('/a.mp3');
+    queue.setMuted(true);
+    expect(audioAt(0).muted).toBe(true);
+    expect(FakeAudioContext.instances).toHaveLength(0);
+    queue.setMuted(false);
+    expect(audioAt(0).muted).toBe(false);
+  });
+
+  test('on iOS a routed item is re-seeked on resume, so it does not replay stale audio', async () => {
+    setUserAgent(IPHONE_UA);
+    const queue = setup({ webAudio: 'auto' });
+    await queue.queueAudio('/a.mp3', 0, { volume: 0.5 });
+    await flush();
+    audioAt(0).tick(3);
+    await queue.pauseChannel(0);
+    const seeks = jest.spyOn(audioAt(0), 'currentTime', 'set');
+    await queue.resumeChannel(0);
+    expect(seeks).toHaveBeenCalledWith(3);
+  });
+
+  test('desktop resumes without re-seeking', async () => {
+    const queue = setup({ webAudio: 'force' });
+    await queue.queueAudio('/a.mp3');
+    await flush();
+    audioAt(0).tick(3);
+    await queue.pauseChannel(0);
+    const seeks = jest.spyOn(audioAt(0), 'currentTime', 'set');
+    await queue.resumeChannel(0);
+    expect(seeks).not.toHaveBeenCalled();
   });
 
   test('auto mode on desktop does not use Web Audio', async () => {

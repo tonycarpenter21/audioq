@@ -61,7 +61,12 @@ import {
   secondsToMs,
   settleWithin
 } from './utils.js';
-import { WebAudioEngine, isWebAudioSupported, shouldUseWebAudio } from './web-audio.js';
+import {
+  WebAudioEngine,
+  isIOSDevice,
+  isWebAudioSupported,
+  shouldUseWebAudio
+} from './web-audio.js';
 
 /** Events emitted by a queue, with their payloads. */
 export interface QueueEvents {
@@ -434,14 +439,16 @@ export class QueueEngine {
   }
 
   /**
-   * Routes an element through Web Audio when needed: always in 'force' mode or on iOS, and
-   * elsewhere when its channel is panned (panning needs a StereoPannerNode).
+   * Routes an element through Web Audio when it needs it: always in 'force' mode; when its channel
+   * is panned or analysed; and on iOS ('auto') once its volume is between silent and full, because
+   * iOS ignores element volume. Routing on iOS is kept to that minimum on purpose: there, an
+   * element routed through Web Audio loses lock-screen and background playback and can drift out
+   * of sync on pause and resume (WebKit bugs 204228, 237323, 261554).
    */
   protected routeThroughWebAudio(channel: Channel, item: Item, element: HTMLAudioElement): void {
-    const mode = this.config.webAudio;
-    const wanted = channel.pan !== 0 || channel.analyser !== undefined;
-    const forFeature = wanted && mode !== 'off' && isWebAudioSupported();
-    if (item.route || !(shouldUseWebAudio(mode) || forFeature)) return;
+    if (item.route) return;
+    const forFeature = this.needsWebAudioFeature(channel);
+    if (!forFeature && !this.needsWebAudioVolume(channel)) return;
     const pageUrl = typeof location === 'undefined' ? undefined : location.href;
     // Cross-origin media without CORS plays as silence through Web Audio, so only route sources
     // that are same-origin, preloaded, or explicitly loaded with CORS.
@@ -458,6 +465,20 @@ export class QueueEngine {
     item.route = this.webAudio.connect(element, gain, channel.pan, channel.analyser);
     // Routed audio is controlled by the gain node; the element itself plays at full volume.
     if (item.route) element.volume = 1;
+  }
+
+  /** Panning and analysers need Web Audio on every platform. */
+  protected needsWebAudioFeature(channel: Channel): boolean {
+    const wanted = channel.pan !== 0 || channel.analyser !== undefined;
+    return wanted && this.config.webAudio !== 'off' && isWebAudioSupported();
+  }
+
+  /** Volume needs Web Audio in 'force' mode, and on iOS while it is between silent and full. */
+  protected needsWebAudioVolume(channel: Channel): boolean {
+    const mode = this.config.webAudio;
+    if (!shouldUseWebAudio(mode)) return false;
+    const gain = channel.effectiveGain(this.masterGain());
+    return mode === 'force' || (gain > 0 && gain < 1);
   }
 
   /**
@@ -959,11 +980,15 @@ export class QueueEngine {
   protected applyGain(channel: Channel): void {
     const head = channel.head;
     if (!head?.element) return;
+    // A volume change can be what makes an item need Web Audio (iOS); routing is idempotent.
+    this.routeThroughWebAudio(channel, head, head.element);
     const gain = channel.effectiveGain(this.masterGain());
     if (head.route) {
       this.webAudio.setGain(head.route, gain);
     } else {
       head.element.volume = gain;
+      // iOS ignores volume but honours muted, so silence (mute, a full duck) works there too.
+      head.element.muted = gain === 0;
     }
   }
 
@@ -1052,6 +1077,12 @@ export class QueueEngine {
     this.resetFade(channel);
     channel.paused = false;
     channel.hiddenPause = false;
+    // iOS can resume a Web Audio-routed element from stale buffered audio (WebKit bug 237323), so
+    // the audio restarts from an earlier pause; seeking to where it is flushes that buffer.
+    if (head.route && head.element && isIOSDevice()) {
+      const position = head.element.currentTime;
+      head.element.currentTime = position;
+    }
     const attempt = channel.gapTimer === undefined ? this.play(channel, head) : undefined;
     this.emitter.emit('resume', channel.channelNumber, this.describeHead(channel, head));
     if (attempt) await settleWithin(attempt, this.config.loadTimeoutMs);

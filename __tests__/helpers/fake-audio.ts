@@ -36,6 +36,7 @@ export class FakeAudio extends EventTarget {
   error: { code: number; message: string } | null = null;
   loadCalls: number = 0;
   loop: boolean = false;
+  muted: boolean = false;
   pauseCalls: number = 0;
   paused: boolean = true;
   playBehavior: PlayBehavior | undefined;
