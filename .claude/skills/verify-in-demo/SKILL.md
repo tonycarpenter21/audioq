@@ -77,6 +77,13 @@ support) and prints the addresses to open on a phone on the same Wi-Fi. Prefer i
 `npm start`, whose network address detection fails on some machines (Windows with virtual
 adapters).
 
+For iOS problems, ask the user to open `/audio-queue-demo/diagnostics` on the phone and tap each
+experiment's Run button. Every run saves a JSON report under `qa-reports/` in the demo folder on
+their computer (play() results, events, audioq's debug log, position samples). Read the latest
+report (it holds every result so far) before changing anything. To test a new idea, add an
+experiment to `src/Diagnostics/experiments.ts` first: each one starts its first sound
+synchronously in the tap, and Chromium plays every one of them (a baseline for the harness).
+
 Tell the user what to try on a phone; iOS behaviour (autoplay, volume through Web Audio, lock
 screen) cannot be tested in Chromium. Open questions are listed under "Needs real-device
 testing" in TODO.md.
