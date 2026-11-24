@@ -267,6 +267,18 @@ describe('prefetching', () => {
     expect(FakeAudio.instances).toHaveLength(1);
   });
 
+  test('on iOS no upcoming item is preloaded: each element is created when its turn comes', async () => {
+    setUserAgent(IPHONE_UA);
+    const queue = setup({ prefetchCount: 2 });
+    for (const n of ['a', 'b', 'c']) await queueAudio(queue, `/${n}.mp3`);
+    expect(FakeAudio.instances).toHaveLength(1);
+    audioAt(0).finish();
+    await flush();
+    expect(FakeAudio.instances).toHaveLength(2);
+    expect(audioAt(1).src).toMatch(/b\.mp3$/);
+    expect(audioAt(1).paused).toBe(false);
+  });
+
   test('reordering pulls the new next item into the prefetch window', async () => {
     const queue = setup();
     for (const n of ['a', 'b', 'c']) await queueAudio(queue, `/${n}.mp3`);

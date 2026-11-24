@@ -92,6 +92,9 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
 - On iOS, queued items after the first one or two could refuse to play (iOS only lets an element
   play without a tap if it has played before). A refused item is now moved onto a released element
   that has played, and retried.
+- On iOS, a queue could stop on its third item: the item reported that it was playing but never
+  advanced. Its element had been preloaded in the background while the previous item played;
+  on iOS, upcoming items are no longer preloaded, and each element is created when its turn comes.
 - A new `AudioContext` was created per channel and never closed. One shared context is now created
   only when needed and closed by `destroyAllChannels()`.
 - Every queued item started downloading immediately; finished, stopped and removed items kept their

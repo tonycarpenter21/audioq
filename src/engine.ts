@@ -368,10 +368,22 @@ export class QueueEngine {
     return handle;
   }
 
+  /**
+   * How many waiting items get an element (and start loading) ahead of their turn. None on iOS:
+   * there, an element created and loaded outside a tap while another one plays can fire 'playing'
+   * and then never advance, stalling the queue, while an element created when its turn comes
+   * plays normally (measured on iPhone with the demo's device diagnostics).
+   * @returns The number of upcoming items to preload
+   */
+  prefetchLimit(): number {
+    return isIOSDevice() ? 0 : this.config.prefetchCount;
+  }
+
   /** Makes sure the current item is playing (unless paused) and upcoming items are preloaded. */
   refresh(channel: Channel): void {
+    const prefetchLimit = this.prefetchLimit();
     channel.items.forEach((item, index) => {
-      if (index <= this.config.prefetchCount) this.ensureElement(channel, item);
+      if (index <= prefetchLimit) this.ensureElement(channel, item);
       else if (item.element) this.unload(item);
     });
     const head = channel.head;
