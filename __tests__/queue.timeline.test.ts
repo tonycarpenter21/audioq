@@ -2,8 +2,30 @@
  * @fileoverview Features driven by the playback position: segments (endAt), segment loops, cues
  * and crossfades. FakeAudio's media clock advances currentTime with fake time while playing.
  */
-import { createAudioQueue } from '../src/audio-queue';
-import type { AudioQueue } from '../src/audio-queue';
+import {
+  createAudioQueue,
+  getCrossfade,
+  getCurrentAudioInfo,
+  getQueueLength,
+  getQueueSnapshot,
+  isChannelPaused,
+  offAudioCue,
+  onAudioComplete,
+  onAudioCue,
+  onAudioError,
+  pauseChannel,
+  pauseWithFade,
+  queueAudio,
+  resumeChannel,
+  seekTo,
+  setChannelMuted,
+  setCrossfade,
+  setMuted,
+  setRepeatMode,
+  stopAllAudio,
+  stopAllAudioInChannel
+} from '../src/queue';
+import type { AudioQueue } from '../src/queue';
 import type { AudioCueInfo, QueueConfig } from '../src/types';
 import {
   DESKTOP_UA,
@@ -21,7 +43,7 @@ const setup = (config: Partial<QueueConfig> = {}): AudioQueue =>
   createAudioQueue({ logger: null, ...config });
 
 const names = (queue: AudioQueue, channel = 0): string[] =>
-  queue.getQueueSnapshot(channel)?.items.map((item) => item.fileName) ?? [];
+  getQueueSnapshot(queue, channel)?.items.map((item) => item.fileName) ?? [];
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -37,9 +59,9 @@ describe('segments (endAt)', () => {
   test('playback stops at endAt with timer precision and the next item plays', async () => {
     const queue = setup();
     const complete = jest.fn();
-    queue.onAudioComplete(0, complete);
-    const item = await queue.queueAudio('/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
-    await queue.queueAudio('/next.mp3');
+    onAudioComplete(queue, 0, complete);
+    const item = await queueAudio(queue, '/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
+    await queueAudio(queue, '/next.mp3');
     await flush();
     expect(audioAt(0).currentTime).toBe(1);
     await advance(280, 10);
@@ -53,8 +75,8 @@ describe('segments (endAt)', () => {
   test('endAt respects the playback rate', async () => {
     const queue = setup();
     const complete = jest.fn();
-    queue.onAudioComplete(0, complete);
-    await queue.queueAudio('/a.mp3', 0, { endAt: 400, playbackRate: 2 });
+    onAudioComplete(queue, 0, complete);
+    await queueAudio(queue, '/a.mp3', 0, { endAt: 400, playbackRate: 2 });
     await flush();
     await advance(190, 10);
     expect(complete).not.toHaveBeenCalled();
@@ -66,7 +88,7 @@ describe('segments (endAt)', () => {
     const warn = jest.fn();
     const queue = setup({ logger: { error: jest.fn(), warn } });
     FakeAudio.ignoredSeeks = 2; // the seek before play() and the one on loadedmetadata
-    await queue.queueAudio('/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
+    await queueAudio(queue, '/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
     await flush();
     expect(audioAt(0).currentTime).toBe(1);
     expect(warn).toHaveBeenCalledTimes(1);
@@ -78,7 +100,7 @@ describe('segments (endAt)', () => {
   test('a startAt seek that worked logs nothing', async () => {
     const warn = jest.fn();
     const queue = setup({ logger: { error: jest.fn(), warn } });
-    await queue.queueAudio('/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
+    await queueAudio(queue, '/sprite.mp3', 0, { endAt: 1300, startAt: 1000 });
     await flush();
     expect(audioAt(0).currentTime).toBe(1);
     expect(warn).not.toHaveBeenCalled();
@@ -87,14 +109,14 @@ describe('segments (endAt)', () => {
   test('pausing freezes the segment; resuming finishes it', async () => {
     const queue = setup();
     const complete = jest.fn();
-    queue.onAudioComplete(0, complete);
-    await queue.queueAudio('/a.mp3', 0, { endAt: 300 });
+    onAudioComplete(queue, 0, complete);
+    await queueAudio(queue, '/a.mp3', 0, { endAt: 300 });
     await flush();
     await advance(100, 10);
-    await queue.pauseChannel();
+    await pauseChannel(queue);
     await advance(2000, 100);
     expect(complete).not.toHaveBeenCalled();
-    await queue.resumeChannel();
+    await resumeChannel(queue);
     audioAt(0).startPlaying();
     await advance(220, 10);
     expect(complete).toHaveBeenCalledTimes(1);
@@ -103,8 +125,8 @@ describe('segments (endAt)', () => {
   test('a looping segment jumps back to its start instead of ending', async () => {
     const queue = setup();
     const complete = jest.fn();
-    queue.onAudioComplete(0, complete);
-    await queue.queueAudio('/loop.mp3', 0, { endAt: 1500, loop: true, startAt: 1000 });
+    onAudioComplete(queue, 0, complete);
+    await queueAudio(queue, '/loop.mp3', 0, { endAt: 1500, loop: true, startAt: 1000 });
     await flush();
     expect(audioAt(0).loop).toBe(false);
     await advance(520, 10);
@@ -115,8 +137,8 @@ describe('segments (endAt)', () => {
 
   test('repeat "one" replays the segment from its start', async () => {
     const queue = setup();
-    queue.setRepeatMode(0, 'one');
-    await queue.queueAudio('/a.mp3', 0, { endAt: 2300, startAt: 2000 });
+    setRepeatMode(queue, 0, 'one');
+    await queueAudio(queue, '/a.mp3', 0, { endAt: 2300, startAt: 2000 });
     await flush();
     await advance(320, 10);
     expect(audioAt(0).playCalls).toBe(2);
@@ -125,9 +147,9 @@ describe('segments (endAt)', () => {
 
   test('repeat "all" keeps the segment on the copy', async () => {
     const queue = setup();
-    queue.setRepeatMode(0, 'all');
-    await queue.queueAudio('/a.mp3', 0, { endAt: 500, startAt: 200 });
-    await queue.queueAudio('/b.mp3');
+    setRepeatMode(queue, 0, 'all');
+    await queueAudio(queue, '/a.mp3', 0, { endAt: 500, startAt: 200 });
+    await queueAudio(queue, '/b.mp3');
     await flush();
     await advance(320, 10);
     expect(names(queue)).toEqual(['b.mp3', 'a.mp3']);
@@ -140,10 +162,10 @@ describe('segments (endAt)', () => {
 
   test('items without endAt still end normally', async () => {
     const queue = setup();
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     await advance(500, 50);
-    expect(queue.getQueueLength()).toBe(1);
+    expect(getQueueLength(queue)).toBe(1);
   });
 
   test.each([
@@ -152,21 +174,21 @@ describe('segments (endAt)', () => {
     [{ endAt: NaN }],
     [{ endAt: Infinity }]
   ])('rejects an invalid segment %p', async (options) => {
-    await expect(setup().queueAudio('/a.mp3', 0, options)).rejects.toThrow(RangeError);
+    await expect(queueAudio(setup(), '/a.mp3', 0, options)).rejects.toThrow(RangeError);
   });
 });
 
 describe('cues', () => {
   const collect = (queue: AudioQueue): AudioCueInfo[] => {
     const seen: AudioCueInfo[] = [];
-    queue.onAudioCue(0, (info) => seen.push(info));
+    onAudioCue(queue, 0, (info) => seen.push(info));
     return seen;
   };
 
   test('ranged cues fire on enter and exit, point cues once, all at the right time', async () => {
     const queue = setup();
     const seen = collect(queue);
-    await queue.queueAudio('/talk.mp3', 0, {
+    await queueAudio(queue, '/talk.mp3', 0, {
       cues: [
         { endMs: 2000, startMs: 1000, text: 'Hello' },
         { data: { animation: 'wave' }, startMs: 1500 }
@@ -196,7 +218,7 @@ describe('cues', () => {
     const seen = collect(queue);
     const late = { startMs: 300, text: 'late' };
     const early = { startMs: 100, text: 'early' };
-    await queue.queueAudio('/a.mp3', 0, { cues: [late, early] });
+    await queueAudio(queue, '/a.mp3', 0, { cues: [late, early] });
     await flush();
     await advance(400, 10);
     expect(seen.map((s) => s.cue)).toEqual([early, late]);
@@ -206,7 +228,7 @@ describe('cues', () => {
   test('a cue at 0 fires as playback starts', async () => {
     const queue = setup();
     const seen = collect(queue);
-    await queue.queueAudio('/a.mp3', 0, { cues: [{ startMs: 0, text: 'start' }] });
+    await queueAudio(queue, '/a.mp3', 0, { cues: [{ startMs: 0, text: 'start' }] });
     await flush();
     expect(seen).toHaveLength(1);
   });
@@ -214,54 +236,54 @@ describe('cues', () => {
   test('seeking back replays point cues; seeking into a range enters it', async () => {
     const queue = setup();
     const seen = collect(queue);
-    await queue.queueAudio('/a.mp3', 0, {
+    await queueAudio(queue, '/a.mp3', 0, {
       cues: [{ startMs: 200 }, { endMs: 5000, startMs: 4000 }]
     });
     await flush();
     await advance(300, 10);
     expect(seen).toHaveLength(1);
-    queue.seekTo(0, 0);
+    seekTo(queue, 0, 0);
     await advance(300, 10);
     expect(seen).toHaveLength(2);
-    queue.seekTo(0, 4500);
+    seekTo(queue, 0, 4500);
     expect(seen[2]).toMatchObject({ active: true, index: 1 });
-    queue.seekTo(0, 6000);
+    seekTo(queue, 0, 6000);
     expect(seen[3]).toMatchObject({ active: false, index: 1 });
   });
 
   test('active cues are exited when the item stops', async () => {
     const queue = setup();
     const seen = collect(queue);
-    await queue.queueAudio('/a.mp3', 0, { cues: [{ endMs: 5000, startMs: 0, text: 'x' }] });
+    await queueAudio(queue, '/a.mp3', 0, { cues: [{ endMs: 5000, startMs: 0, text: 'x' }] });
     await flush();
     expect(seen.map((s) => s.active)).toEqual([true]);
-    await queue.stopAllAudioInChannel();
+    await stopAllAudioInChannel(queue);
     expect(seen.map((s) => s.active)).toEqual([true, false]);
   });
 
   test('cues update while paused when the user seeks', async () => {
     const queue = setup();
     const seen = collect(queue);
-    await queue.queueAudio('/a.mp3', 0, { cues: [{ endMs: 3000, startMs: 2000 }] });
+    await queueAudio(queue, '/a.mp3', 0, { cues: [{ endMs: 3000, startMs: 2000 }] });
     await flush();
-    await queue.pauseChannel();
-    queue.seekTo(0, 2500);
+    await pauseChannel(queue);
+    seekTo(queue, 0, 2500);
     expect(seen.map((s) => s.active)).toEqual([true]);
   });
 
   test('offAudioCue removes listeners; subscriptions validate the channel', async () => {
     const queue = setup();
     const listener = jest.fn();
-    queue.onAudioCue(0, listener);
-    queue.offAudioCue(0, listener);
+    onAudioCue(queue, 0, listener);
+    offAudioCue(queue, 0, listener);
     const other = jest.fn();
-    queue.onAudioCue(0, other);
-    queue.offAudioCue();
-    await queue.queueAudio('/a.mp3', 0, { cues: [{ startMs: 0 }] });
+    onAudioCue(queue, 0, other);
+    offAudioCue(queue);
+    await queueAudio(queue, '/a.mp3', 0, { cues: [{ startMs: 0 }] });
     await flush();
     expect(listener).not.toHaveBeenCalled();
     expect(other).not.toHaveBeenCalled();
-    expect(() => queue.onAudioCue(99, jest.fn())).toThrow(RangeError);
+    expect(() => onAudioCue(queue, 99, jest.fn())).toThrow(RangeError);
   });
 
   test.each([
@@ -270,7 +292,7 @@ describe('cues', () => {
     [[{ endMs: 100, startMs: 100 }]],
     [[{ endMs: Infinity, startMs: 0 }]]
   ])('rejects invalid cues %p', async (cues) => {
-    await expect(setup().queueAudio('/a.mp3', 0, { cues })).rejects.toThrow(RangeError);
+    await expect(queueAudio(setup(), '/a.mp3', 0, { cues })).rejects.toThrow(RangeError);
   });
 });
 
@@ -278,11 +300,11 @@ describe('crossfade', () => {
   test('the next item starts early and fades in while the current one fades out', async () => {
     const queue = setup();
     const complete = jest.fn();
-    queue.onAudioComplete(0, complete);
-    queue.setCrossfade(0, 1000);
-    expect(queue.getCrossfade(0)).toBe(1000);
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    onAudioComplete(queue, 0, complete);
+    setCrossfade(queue, 0, 1000);
+    expect(getCrossfade(queue, 0)).toBe(1000);
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     const [a, b] = [audioAt(0), audioAt(1)];
     await advance(8990, 100);
@@ -303,38 +325,38 @@ describe('crossfade', () => {
 
   test('muting during a crossfade silences the fading item at once', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 1000);
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    setCrossfade(queue, 0, 1000);
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     const [a, b] = [audioAt(0), audioAt(1)];
     await advance(9300, 100);
     expect(a.volume).toBeGreaterThan(0);
-    queue.setMuted(true);
+    setMuted(queue, true);
     expect(a.src).toBe('');
     expect(b.volume).toBe(0);
     await advance(800, 16);
     expect(b.volume).toBe(0);
-    queue.setMuted(false);
+    setMuted(queue, false);
     expect(b.volume).toBeCloseTo(1);
   });
 
   test('muting another channel leaves a crossfade alone', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 1000);
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    setCrossfade(queue, 0, 1000);
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     await advance(9300, 100);
-    queue.setChannelMuted(1, true);
+    setChannelMuted(queue, 1, true);
     expect(audioAt(0).src).not.toBe('');
   });
 
   test('is limited to half of a short item', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 5000);
-    await queue.queueAudio('/short.mp3', 0, { endAt: 2000 });
-    await queue.queueAudio('/b.mp3');
+    setCrossfade(queue, 0, 5000);
+    await queueAudio(queue, '/short.mp3', 0, { endAt: 2000 });
+    await queueAudio(queue, '/b.mp3');
     await flush();
     await advance(990, 10);
     expect(audioAt(1).playCalls).toBe(0);
@@ -344,33 +366,33 @@ describe('crossfade', () => {
 
   test('does not crossfade the last item, loops, or repeat-one', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 1000);
-    await queue.queueAudio('/only.mp3');
+    setCrossfade(queue, 0, 1000);
+    await queueAudio(queue, '/only.mp3');
     await flush();
     await advance(9500, 100);
-    expect(queue.getQueueLength()).toBe(1);
+    expect(getQueueLength(queue)).toBe(1);
     const looping = setup();
-    looping.setCrossfade(0, 1000);
-    await looping.queueAudio('/loop.mp3', 0, { loop: true });
-    await looping.queueAudio('/b.mp3');
+    setCrossfade(looping, 0, 1000);
+    await queueAudio(looping, '/loop.mp3', 0, { loop: true });
+    await queueAudio(looping, '/b.mp3');
     await flush();
     await advance(9500, 100);
-    expect(looping.getQueueLength()).toBe(2);
+    expect(getQueueLength(looping)).toBe(2);
     const one = setup();
-    one.setCrossfade(0, 1000);
-    one.setRepeatMode(0, 'one');
-    await one.queueAudio('/a.mp3');
-    await one.queueAudio('/b.mp3');
+    setCrossfade(one, 0, 1000);
+    setRepeatMode(one, 0, 'one');
+    await queueAudio(one, '/a.mp3');
+    await queueAudio(one, '/b.mp3');
     await flush();
     await advance(9500, 100);
-    expect(one.getQueueLength()).toBe(2);
+    expect(getQueueLength(one)).toBe(2);
   });
 
   test('with repeat "all" a single item crossfades into its own copy', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 1000);
-    queue.setRepeatMode(0, 'all');
-    await queue.queueAudio('/a.mp3');
+    setCrossfade(queue, 0, 1000);
+    setRepeatMode(queue, 0, 'all');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     await advance(9100, 100);
     expect(FakeAudio.instances).toHaveLength(2);
@@ -379,58 +401,58 @@ describe('crossfade', () => {
 
   test('pausing during a crossfade cuts the outgoing item', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 1000);
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    setCrossfade(queue, 0, 1000);
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     await advance(9200, 100);
-    await queue.pauseChannel();
+    await pauseChannel(queue);
     expect(audioAt(0).src).toBe('');
-    expect(queue.isChannelPaused()).toBe(true);
+    expect(isChannelPaused(queue)).toBe(true);
   });
 
   test('stopping during a crossfade releases both items', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 1000);
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    setCrossfade(queue, 0, 1000);
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     await advance(9200, 100);
-    await queue.stopAllAudio();
+    await stopAllAudio(queue);
     expect(FakeAudio.instances.every((audio) => audio.src === '')).toBe(true);
   });
 
   test('an error on the outgoing item just releases it', async () => {
     const queue = setup();
     const errors = jest.fn();
-    queue.onAudioError(0, errors);
-    queue.setCrossfade(0, 1000);
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    onAudioError(queue, 0, errors);
+    setCrossfade(queue, 0, 1000);
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     await advance(9200, 100);
     audioAt(0).fail(2);
     expect(errors).not.toHaveBeenCalled();
     expect(audioAt(0).src).toBe('');
-    expect(queue.getCurrentAudioInfo()?.fileName).toBe('b.mp3');
+    expect(getCurrentAudioInfo(queue)?.fileName).toBe('b.mp3');
   });
 
   test('a pause still fading out is not interrupted by a crossfade', async () => {
     const queue = setup();
-    queue.setCrossfade(0, 1000);
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    setCrossfade(queue, 0, 1000);
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     await advance(8800, 100);
-    void queue.pauseWithFade(undefined, 0, 2000);
+    void pauseWithFade(queue, undefined, 0, 2000);
     await advance(300, 50);
     expect(audioAt(1).playCalls).toBe(0);
   });
 
   test('validates the length', () => {
     const queue = setup();
-    expect(queue.getCrossfade(7)).toBe(0);
-    expect(() => queue.setCrossfade(0, -1)).toThrow(RangeError);
-    expect(() => queue.setCrossfade(0, Infinity)).toThrow(RangeError);
+    expect(getCrossfade(queue, 7)).toBe(0);
+    expect(() => setCrossfade(queue, 0, -1)).toThrow(RangeError);
+    expect(() => setCrossfade(queue, 0, Infinity)).toThrow(RangeError);
   });
 });

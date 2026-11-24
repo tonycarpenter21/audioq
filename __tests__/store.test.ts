@@ -2,8 +2,15 @@
  * @fileoverview Tests for createChannelStore: the subscribe/getSnapshot contract used by React's
  * useSyncExternalStore and Svelte stores.
  */
-import { createAudioQueue } from '../src/audio-queue';
-import type { AudioQueue } from '../src/audio-queue';
+import {
+  createAudioQueue,
+  destroyAllChannels,
+  getAllChannelsInfo,
+  pauseChannel,
+  queueAudio,
+  resumeChannel
+} from '../src/queue';
+import type { AudioQueue } from '../src/queue';
 import { getDefaultAudioQueue } from '../src/default-queue';
 import { createChannelStore } from '../src/store';
 import type { ChannelState } from '../src/store';
@@ -29,14 +36,14 @@ describe('getSnapshot', () => {
       isPaused: false,
       items: []
     });
-    expect(queue.getAllChannelsInfo()).toEqual([]);
+    expect(getAllChannelsInfo(queue)).toEqual([]);
   });
 
   test('returns the same object until something changes, even without subscribers', async () => {
     const store = createChannelStore(0, queue);
     const empty = store.getSnapshot();
     expect(store.getSnapshot()).toBe(empty);
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     const queued = store.getSnapshot();
     expect(queued).not.toBe(empty);
     expect(queued.items.map((item) => item.fileName)).toEqual(['a.mp3']);
@@ -44,11 +51,11 @@ describe('getSnapshot', () => {
   });
 
   test('uses the default queue when none is given', async () => {
-    await getDefaultAudioQueue().destroyAllChannels();
+    await destroyAllChannels(getDefaultAudioQueue());
     const store = createChannelStore();
-    await getDefaultAudioQueue().queueAudio('/default.mp3');
+    await queueAudio(getDefaultAudioQueue(), '/default.mp3');
     expect(store.getSnapshot().items[0]?.fileName).toBe('default.mp3');
-    await getDefaultAudioQueue().destroyAllChannels();
+    await destroyAllChannels(getDefaultAudioQueue());
   });
 
   test('rejects invalid channels', () => {
@@ -70,8 +77,8 @@ describe('subscribe', () => {
     const store = createChannelStore(0, queue);
     const states: ChannelState[] = [];
     store.subscribe((state) => states.push(state));
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     expect(last(states)?.current?.fileName).toBe('a.mp3');
     expect(last(states)?.items).toHaveLength(2);
@@ -79,9 +86,9 @@ describe('subscribe', () => {
     audioAt(0).tick(2);
     expect(last(states)?.current?.currentTime).toBe(2000);
 
-    await queue.pauseChannel();
+    await pauseChannel(queue);
     expect(last(states)?.isPaused).toBe(true);
-    await queue.resumeChannel();
+    await resumeChannel(queue);
     expect(last(states)?.isPaused).toBe(false);
 
     audioAt(0).finish();
@@ -92,7 +99,7 @@ describe('subscribe', () => {
 
   test('does not notify when nothing visible changed', async () => {
     const store = createChannelStore(0, queue);
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     audioAt(0).tick(1);
     const listener = jest.fn();
@@ -111,7 +118,7 @@ describe('subscribe', () => {
     const offSecond = store.subscribe(second);
     offFirst();
     offFirst(); // unsubscribing twice is harmless
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     expect(callArg(second, -1)).toMatchObject({
       items: [{ fileName: 'a.mp3' }]
     });
@@ -119,7 +126,7 @@ describe('subscribe', () => {
 
     offSecond();
     second.mockClear();
-    await queue.queueAudio('/b.mp3');
+    await queueAudio(queue, '/b.mp3');
     expect(second).not.toHaveBeenCalled();
 
     const third = jest.fn();
@@ -133,7 +140,7 @@ describe('subscribe', () => {
     const listener = jest.fn();
     store.subscribe(listener);
     listener.mockClear();
-    await queue.queueAudio('/other.mp3', 0);
+    await queueAudio(queue, '/other.mp3', 0);
     await flush();
     expect(listener).not.toHaveBeenCalled();
   });

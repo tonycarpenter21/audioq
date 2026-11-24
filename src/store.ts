@@ -3,7 +3,20 @@
  * (`useSyncExternalStore`), Svelte (it is a Svelte store), Vue, Solid, or plain code.
  */
 
-import type { AudioQueue } from './audio-queue.js';
+import type { AudioQueue } from './queue.js';
+import {
+  getCurrentAudioInfo,
+  getQueueConfig,
+  getQueueSnapshot,
+  isChannelPaused,
+  onAudioComplete,
+  onAudioError,
+  onAudioPause,
+  onAudioProgress,
+  onAudioResume,
+  onAudioStart,
+  onQueueChange
+} from './queue.js';
 import { getDefaultAudioQueue } from './default-queue.js';
 import type { AudioInfo, QueueItem, Unsubscribe } from './types.js';
 import { assertChannelNumber } from './utils.js';
@@ -37,22 +50,22 @@ export interface ChannelStore {
   subscribe: (listener: ChannelStateListener) => Unsubscribe;
 }
 
-/** Events after which a channel's state may have changed. */
+/** Subscriptions to the events after which a channel's state may have changed. */
 const EVENTS = [
-  'onAudioComplete',
-  'onAudioError',
-  'onAudioPause',
-  'onAudioProgress',
-  'onAudioResume',
-  'onAudioStart',
-  'onQueueChange'
+  onAudioComplete,
+  onAudioError,
+  onAudioPause,
+  onAudioProgress,
+  onAudioResume,
+  onAudioStart,
+  onQueueChange
 ] as const;
 
 const read = (queue: AudioQueue, channelNumber: number): ChannelState => ({
   channelNumber,
-  current: queue.getCurrentAudioInfo(channelNumber),
-  isPaused: queue.isChannelPaused(channelNumber),
-  items: queue.getQueueSnapshot(channelNumber)?.items ?? []
+  current: getCurrentAudioInfo(queue, channelNumber),
+  isPaused: isChannelPaused(queue, channelNumber),
+  items: getQueueSnapshot(queue, channelNumber)?.items ?? []
 });
 
 /** The parts of a state a UI shows, as one comparable string. */
@@ -91,7 +104,7 @@ const fingerprint = ({ current, isPaused, items }: ChannelState): string =>
  */
 export const createChannelStore = (channelNumber: number = 0, queue?: AudioQueue): ChannelStore => {
   const source = (): AudioQueue => queue ?? getDefaultAudioQueue();
-  assertChannelNumber(channelNumber, source().getQueueConfig().maxChannels);
+  assertChannelNumber(channelNumber, getQueueConfig(source()).maxChannels);
   const listeners: Set<ChannelStateListener> = new Set();
   let state = read(source(), channelNumber);
   let key = fingerprint(state);
@@ -121,7 +134,7 @@ export const createChannelStore = (channelNumber: number = 0, queue?: AudioQueue
       if (listeners.size === 0) {
         refresh();
         const target = source();
-        detach = EVENTS.map((event) => target[event](channelNumber, notify));
+        detach = EVENTS.map((subscribe) => subscribe(target, channelNumber, notify));
       }
       listeners.add(listener);
       listener(state);

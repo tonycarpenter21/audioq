@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
-import { API_SNAPSHOT_PATH, readPublicApi } from '../api.mjs';
+import { API_SNAPSHOT_PATH, ENTRY_POINTS, readPublicApi, readPublishedApi } from '../api.mjs';
 import { validationConfig } from '../config.mjs';
 import {
   abs,
@@ -32,12 +32,20 @@ const runInNode = async (code) => {
   }
 };
 
-const importBoth = `
+/** Package entry points other than ./package.json, e.g. ['.', './queue']. */
+const entryPoints = (pkg) =>
+  Object.entries(pkg.exports ?? {}).filter(([subpath]) => subpath !== './package.json');
+
+/**
+ * Node code that loads one built entry point (`index` or `queue`) as `cjs` and `esm`, and records
+ * the globals the import added as `added`.
+ */
+const importBoth = (file = 'index') => `
 import { createRequire } from 'node:module';
 const require = createRequire(${JSON.stringify(pathToFileURL(abs('package.json')).href)});
 const before = new Set(Object.getOwnPropertyNames(globalThis));
-const cjs = require(${JSON.stringify(abs('dist/cjs/index.js'))});
-const esm = await import(${JSON.stringify(pathToFileURL(abs('dist/esm/index.js')).href)});
+const cjs = require(${JSON.stringify(abs(`dist/cjs/${file}.js`))});
+const esm = await import(${JSON.stringify(pathToFileURL(abs(`dist/esm/${file}.js`)).href)});
 const added = Object.getOwnPropertyNames(globalThis).filter((key) => !before.has(key));
 `;
 
@@ -98,11 +106,11 @@ export const packageGates = [
       need(pkg.sideEffects === false, 'sideEffects must be false (enables tree-shaking)');
       need(pkg.engines?.node !== undefined, 'engines.node is missing');
       need(Array.isArray(pkg.files) && pkg.files.includes('dist'), 'files must include dist');
-      const root = pkg.exports?.['.'];
-      need(root !== undefined, 'exports["."] is missing');
-      if (root) {
-        need(Object.keys(root)[0] === 'types', 'exports["."].types must be the first condition');
-        need(root.import && root.require, 'exports["."] needs import and require conditions');
+      need(pkg.exports?.['.'] !== undefined, 'exports["."] is missing');
+      need(pkg.exports?.['./queue'] !== undefined, 'exports["./queue"] is missing');
+      for (const [subpath, target] of entryPoints(pkg)) {
+        need(Object.keys(target)[0] === 'types', `exports["${subpath}"].types must come first`);
+        need(target.import && target.require, `exports["${subpath}"] needs import and require`);
       }
       need(pkg.scripts?.['validate:all'] !== undefined, 'scripts["validate:all"] is missing');
       return problems.length === 0
@@ -150,7 +158,12 @@ export const packageGates = [
     run: async () => {
       const pkg = packageJson();
       const problems = [];
-      const targets = [pkg.main, pkg.module, pkg.types, ...Object.values(pkg.exports?.['.'] ?? {})];
+      const targets = [
+        pkg.main,
+        pkg.module,
+        pkg.types,
+        ...entryPoints(pkg).flatMap(([, target]) => Object.values(target))
+      ];
       for (const target of targets) {
         if (typeof target === 'string' && !exists(target))
           problems.push(`${target} does not exist`);
@@ -164,21 +177,28 @@ export const packageGates = [
           problems.push(`${marker} must declare "type": "${type}"`);
         }
       }
-      const { error, value } = await runInNode(
-        `${importBoth} console.log(JSON.stringify({ cjs: Object.keys(cjs).sort(), esm: Object.keys(esm).filter((k) => k !== 'default').sort() }));`
-      );
-      if (error)
-        return fail('Built package failed to load', [...problems, ...lastLines(error, 20)]);
-      const missingInCjs = value.esm.filter((name) => !value.cjs.includes(name));
-      const missingInEsm = value.cjs.filter((name) => !value.esm.includes(name));
-      if (missingInCjs.length) problems.push(`Missing from CJS: ${missingInCjs.join(', ')}`);
-      if (missingInEsm.length) problems.push(`Missing from ESM: ${missingInEsm.join(', ')}`);
-      const declared = new Set(Object.keys(readPublicApi()));
-      const undeclared = value.esm.filter((name) => !declared.has(name));
-      if (undeclared.length)
-        problems.push(`Runtime exports without type declarations: ${undeclared.join(', ')}`);
+      let count = 0;
+      for (const [specifier, source] of Object.entries(ENTRY_POINTS)) {
+        const file = specifier === 'audioq' ? 'index' : specifier.replace('audioq/', '');
+        const { error, value } = await runInNode(
+          `${importBoth(file)} console.log(JSON.stringify({ cjs: Object.keys(cjs).sort(), esm: Object.keys(esm).filter((k) => k !== 'default').sort() }));`
+        );
+        if (error)
+          return fail(`${specifier} failed to load`, [...problems, ...lastLines(error, 20)]);
+        const missingInCjs = value.esm.filter((name) => !value.cjs.includes(name));
+        const missingInEsm = value.cjs.filter((name) => !value.esm.includes(name));
+        if (missingInCjs.length)
+          problems.push(`${specifier}: missing from CJS: ${missingInCjs.join(', ')}`);
+        if (missingInEsm.length)
+          problems.push(`${specifier}: missing from ESM: ${missingInEsm.join(', ')}`);
+        const declared = new Set(Object.keys(readPublicApi(source)));
+        const undeclared = value.esm.filter((name) => !declared.has(name));
+        if (undeclared.length)
+          problems.push(`${specifier}: runtime exports without types: ${undeclared.join(', ')}`);
+        count += value.esm.length;
+      }
       return problems.length === 0
-        ? pass(`${value.esm.length} runtime exports identical in ESM and CJS, all typed`)
+        ? pass(`${count} runtime exports identical in ESM and CJS, all typed`)
         : fail('Package entry points are inconsistent', problems);
     },
     title: 'Package entry points'
@@ -191,14 +211,15 @@ export const packageGates = [
       'until audio is actually queued (SSR / Next.js safety).',
     id: 'ssr-import',
     run: async () => {
-      const { error, value } = await runInNode(`${importBoth}
-        const queue = esm.createAudioQueue({ logger: null });
+      const { error, value } = await runInNode(`${importBoth()}
+        const onQueue = await import(${JSON.stringify(pathToFileURL(abs('dist/esm/queue.js')).href)});
+        const queue = onQueue.createAudioQueue({ logger: null });
         let queueError = '';
-        try { await queue.queueAudio('/a.mp3'); } catch (e) { queueError = e.message; }
+        try { await onQueue.queueAudio(queue, '/a.mp3'); } catch (e) { queueError = e.message; }
         console.log(JSON.stringify({
           added,
           config: cjs.getQueueConfig().maxChannels,
-          length: queue.getQueueLength(),
+          length: onQueue.getQueueLength(queue),
           queueError
         }));`);
       if (error) return fail('Importing the package without a DOM failed', lastLines(error, 20));
@@ -248,6 +269,10 @@ export const packageGates = [
         minifiedFull: await minified(`export * from ${entry};`),
         minifiedQueueAudioOnly: await minified(
           `import { queueAudio } from ${entry}; queueAudio('/a.mp3');`
+        ),
+        minifiedQueueEntryOnly: await minified(
+          `import { createAudioQueue, queueAudio } from ${JSON.stringify(abs('dist/esm/queue.js'))};
+           queueAudio(createAudioQueue(), '/a.mp3');`
         )
       };
       const kb = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
@@ -255,13 +280,15 @@ export const packageGates = [
         cjs: budget.cjsGzipBytes,
         esm: budget.esmGzipBytes,
         minifiedFull: budget.minifiedFullGzipBytes,
-        minifiedQueueAudioOnly: budget.minifiedQueueAudioOnlyGzipBytes
+        minifiedQueueAudioOnly: budget.minifiedQueueAudioOnlyGzipBytes,
+        minifiedQueueEntryOnly: budget.minifiedQueueAudioOnlyGzipBytes
       };
       const problems = Object.entries(sizes)
         .filter(([key, bytes]) => bytes > limits[key])
         .map(([key, bytes]) => `${key}: ${kb(bytes)} > budget ${kb(limits[key])}`);
       const summary =
-        `min+gz ${kb(sizes.minifiedFull)} (queueAudio only ${kb(sizes.minifiedQueueAudioOnly)}), ` +
+        `min+gz ${kb(sizes.minifiedFull)} (queueAudio only ${kb(sizes.minifiedQueueAudioOnly)}, ` +
+        `audioq/queue queueAudio only ${kb(sizes.minifiedQueueEntryOnly)}), ` +
         `dist gz ESM ${kb(sizes.esm)} / CJS ${kb(sizes.cjs)}`;
       return problems.length === 0
         ? pass(summary, { output: JSON.stringify(sizes, null, 2) })
@@ -313,7 +340,7 @@ export const packageGates = [
       if (!exists(API_SNAPSHOT_PATH))
         return fail(`${API_SNAPSHOT_PATH} is missing`, ['Run: npm run api:update']);
       const expected = readJson(API_SNAPSHOT_PATH);
-      const actual = readPublicApi();
+      const actual = readPublishedApi();
       const problems = [];
       if (/"(\/|[A-Za-z]:\\)/.test(JSON.stringify(actual))) {
         problems.push('The API description contains absolute file paths (machine-specific)');

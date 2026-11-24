@@ -3,7 +3,21 @@
  * A standalone function, so apps that do not use it do not ship it.
  */
 
-import type { AudioQueue } from './audio-queue.js';
+import type { AudioQueue } from './queue.js';
+import {
+  getCurrentAudioInfo,
+  onAudioComplete,
+  onAudioPause,
+  onAudioProgress,
+  onAudioResume,
+  onAudioStart,
+  pauseChannel,
+  resumeChannel,
+  seekBy,
+  seekTo,
+  stopAllAudioInChannel,
+  stopCurrentAudioInChannel
+} from './queue.js';
 import { getDefaultAudioQueue } from './default-queue.js';
 import type { AudioInfo, AudioMetadata, AudioStartInfo, Unsubscribe } from './types.js';
 
@@ -80,7 +94,7 @@ export const connectMediaSession = (options: MediaSessionOptions = {}): Unsubscr
   handlers.forEach(([action, handler]) => setHandler(action, handler));
   const unsubscribers = followQueue(session, queue, channel);
 
-  const current = queue.getCurrentAudioInfo(channel);
+  const current = getCurrentAudioInfo(queue, channel);
   if (current) {
     setMetadata(session, current);
     session.playbackState = current.isPaused ? 'paused' : 'playing';
@@ -103,17 +117,17 @@ const actionHandlers = (
   const skipMs = (details: MediaSessionActionDetails): number =>
     details.seekOffset !== undefined ? details.seekOffset * 1000 : offsetMs;
   return [
-    ['play', () => void queue.resumeChannel(channel)],
-    ['pause', () => void queue.pauseChannel(channel)],
-    ['stop', () => void queue.stopAllAudioInChannel(channel)],
-    ['nexttrack', () => void queue.stopCurrentAudioInChannel(channel)],
-    ['previoustrack', () => queue.seekTo(channel, 0)],
-    ['seekbackward', (details) => queue.seekBy(channel, -skipMs(details))],
-    ['seekforward', (details) => queue.seekBy(channel, skipMs(details))],
+    ['play', () => void resumeChannel(queue, channel)],
+    ['pause', () => void pauseChannel(queue, channel)],
+    ['stop', () => void stopAllAudioInChannel(queue, channel)],
+    ['nexttrack', () => void stopCurrentAudioInChannel(queue, channel)],
+    ['previoustrack', () => seekTo(queue, channel, 0)],
+    ['seekbackward', (details) => seekBy(queue, channel, -skipMs(details))],
+    ['seekforward', (details) => seekBy(queue, channel, skipMs(details))],
     [
       'seekto',
       (details) => {
-        if (details.seekTime !== undefined) queue.seekTo(channel, details.seekTime * 1000);
+        if (details.seekTime !== undefined) seekTo(queue, channel, details.seekTime * 1000);
       }
     ]
   ];
@@ -121,20 +135,20 @@ const actionHandlers = (
 
 /** Keeps the session's metadata, state and position in step with a channel. */
 const followQueue = (session: MediaSession, queue: AudioQueue, channel: number): Unsubscribe[] => [
-  queue.onAudioStart(channel, (info) => {
+  onAudioStart(queue, channel, (info) => {
     setMetadata(session, info);
     session.playbackState = 'playing';
   }),
-  queue.onAudioResume(channel, (_channel, info) => {
+  onAudioResume(queue, channel, (_channel, info) => {
     session.playbackState = 'playing';
     setPosition(session, info);
   }),
-  queue.onAudioPause(channel, (_channel, info) => {
+  onAudioPause(queue, channel, (_channel, info) => {
     session.playbackState = 'paused';
     setPosition(session, info);
   }),
-  queue.onAudioProgress(channel, (info) => setPosition(session, info)),
-  queue.onAudioComplete(channel, (info) => {
+  onAudioProgress(queue, channel, (info) => setPosition(session, info)),
+  onAudioComplete(queue, channel, (info) => {
     if (info.remainingInQueue > 0) return;
     session.metadata = null;
     session.playbackState = 'none';

@@ -10,14 +10,20 @@
  *
  * The test suites run against the built output (jest.dist.config.js) to prove nothing broke.
  */
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import ts from 'typescript';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
+/** The "types" file of every entry point in package.json's exports map, e.g. ./dist/types/index.d.ts. */
+export const publicTypeEntries = () =>
+  Object.values(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).exports)
+    .map((target) => (typeof target === 'object' ? target.types : undefined))
+    .filter((types) => typeof types === 'string');
 
 const sourceFiles = () =>
   readdirSync(join(root, 'src'))
@@ -107,9 +113,12 @@ const isHiddenMember = (node) =>
   (ts.getCombinedModifierFlags(node) & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) !==
     0;
 
-/** The declaration files index.d.ts re-exports from, followed transitively. */
+/**
+ * The declaration files of the package's entry points (the "types" of each package.json export),
+ * plus every file they re-export from, followed transitively.
+ */
 const publicFiles = (typesDir) => {
-  const files = new Set(['index.d.ts']);
+  const files = new Set(publicTypeEntries().map((path) => basename(path)));
   for (const file of files) {
     const text = readFileSync(join(typesDir, file), 'utf8');
     for (const [, target] of text.matchAll(
@@ -122,8 +131,8 @@ const publicFiles = (typesDir) => {
 };
 
 /**
- * Every name in the public type declarations: each file index.d.ts re-exports from, minus
- * private and protected class members.
+ * Every name in the public type declarations (see publicFiles), minus private and protected class
+ * members.
  */
 const publicNames = () => {
   const names = new Set();
@@ -146,6 +155,27 @@ const publicNames = () => {
   return names;
 };
 
+/**
+ * Deletes declaration files that no entry point's types reach (engine.d.ts, channel.d.ts, ...):
+ * they describe internals, nothing can import them through the exports map, and they would only
+ * add to the download.
+ */
+const pruneInternalDeclarations = () => {
+  const typesDir = join(root, 'dist', 'types');
+  const reachable = new Set(publicTypeEntries().map((path) => basename(path)));
+  for (const file of reachable) {
+    const text = readFileSync(join(typesDir, file), 'utf8');
+    for (const [, target] of text.matchAll(
+      /(?:\bfrom|\bimport\()\s*['"]\.\/([\w.-]+?)(?:\.js)?['"]/g
+    )) {
+      reachable.add(`${target}.d.ts`);
+    }
+  }
+  const removed = readdirSync(typesDir).filter((file) => !reachable.has(file));
+  for (const file of removed) rmSync(join(typesDir, file));
+  return removed;
+};
+
 /** Internal names that are safe to rename. */
 export const internalNames = () => {
   const { declared, strings } = scanSource();
@@ -153,43 +183,10 @@ export const internalNames = () => {
   return [...declared].filter((name) => IDENTIFIER.test(name) && !reserved.has(name)).sort();
 };
 
-/**
- * Removes protected members from QueueEngine's declaration file: they are implementation details
- * (and renamed at build time), so they must not appear as API to subclasses.
- */
-const stripProtectedMembers = (path) => {
-  const text = readFileSync(path, 'utf8');
-  const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
-  const printer = ts.createPrinter();
-  const transform = (context) => (sourceFile) => {
-    const visit = (node) => {
-      if (ts.isClassDeclaration(node)) {
-        const members = node.members.filter(
-          (member) =>
-            !(ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Protected) &&
-            !(ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Private)
-        );
-        return context.factory.updateClassDeclaration(
-          node,
-          node.modifiers,
-          node.name,
-          node.typeParameters,
-          node.heritageClauses,
-          members
-        );
-      }
-      return ts.visitEachChild(node, visit, context);
-    };
-    return ts.visitNode(sourceFile, visit);
-  };
-  const [result] = ts.transform(file, [transform]).transformed;
-  writeFileSync(path, printer.printFile(result));
-};
-
-/** Renames internal properties in dist/esm and dist/cjs, and trims internal declarations. */
+/** Renames internal properties in dist/esm and dist/cjs, and drops internal declaration files. */
 export const mangleDist = async () => {
   const names = internalNames();
-  if (names.length === 0) return { names };
+  if (names.length === 0) return { names, prunedDeclarations: pruneInternalDeclarations() };
   const mangleProps = new RegExp(`^(${names.join('|')})$`);
   let mangleCache = {};
   for (const [folder, format] of [
@@ -213,6 +210,5 @@ export const mangleDist = async () => {
     });
     mangleCache = result.mangleCache ?? mangleCache;
   }
-  stripProtectedMembers(join(root, 'dist', 'types', 'engine.d.ts'));
-  return { names };
+  return { names, prunedDeclarations: pruneInternalDeclarations() };
 };

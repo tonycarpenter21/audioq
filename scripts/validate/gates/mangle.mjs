@@ -7,15 +7,17 @@
  *   2. a renamed key is read with a runtime string (`table[key]`, `key in table`,
  *      `Object.keys(table)`, `for (key in table)`), so the lookup silently finds nothing.
  */
-import { internalNames } from '../../mangle.mjs';
+import { internalNames, publicTypeEntries } from '../../mangle.mjs';
 import { abs, fail, getSourceFile, lineOf, pass, sourceFiles, ts } from '../lib.mjs';
 
-/** Every property, method and parameter name reachable from the package's exported types. */
+/**
+ * Every property, method and parameter name reachable from the exported types of each entry point
+ * ('audioq' and 'audioq/queue').
+ */
 export const publicApiNames = () => {
-  const entry = abs('dist/types/index.d.ts');
-  const program = ts.createProgram([entry], { noEmit: true, skipLibCheck: true, strict: true });
+  const entries = publicTypeEntries().map((path) => abs(path));
+  const program = ts.createProgram(entries, { noEmit: true, skipLibCheck: true, strict: true });
   const checker = program.getTypeChecker();
-  const moduleSymbol = checker.getSymbolAtLocation(program.getSourceFile(entry));
   const names = new Set();
   const seen = new Set();
   const isLibrary = (declaration) =>
@@ -52,7 +54,10 @@ export const publicApiNames = () => {
     type.getConstructSignatures().forEach(visitSignature);
   };
 
-  for (const exported of checker.getExportsOfModule(moduleSymbol)) {
+  const exports = entries.flatMap((entry) =>
+    checker.getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(entry)))
+  );
+  for (const exported of exports) {
     const symbol =
       exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported;
     const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];

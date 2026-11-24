@@ -39,16 +39,21 @@ await queueAudio('/sfx/coin.mp3', 2); // effects on channel 2
 
 The top-level functions (`queueAudio`, `pauseChannel`, ...) share one default queue, created the
 first time you use it. For more than one independent player, custom settings, or isolated tests,
-create your own queues with `createAudioQueue`. Every top-level function is also a method on the
-`AudioQueue` it returns.
+create your own queues with `createAudioQueue` and use the functions of `audioq/queue`: the same
+names, with the queue as the first argument.
 
 ```ts
+import { createAudioQueue, queueAudio, setQueueConfig } from 'audioq/queue';
+
 const sfx = createAudioQueue({ defaultMaxQueueSize: 5, dropOldestWhenFull: true });
-await sfx.queueAudio('/sfx/laser.mp3');
+await queueAudio(sfx, '/sfx/laser.mp3');
 
 const same = getDefaultAudioQueue(); // the queue behind the top-level functions
-same.setQueueConfig({ loadTimeoutMs: 10000 });
+setQueueConfig(same, { loadTimeoutMs: 10000 });
 ```
+
+A queue is an opaque value: it has no methods, so your bundler drops every function you don't
+import (`queueAudio` with a queue of your own is about 8 KB minified and gzipped).
 
 Importing audioq has no side effects, so it is safe in server-side rendering (Next.js, Nuxt,
 SvelteKit). Audio only starts when you call `queueAudio` in the browser.
@@ -544,7 +549,7 @@ Each run writes `.validation-reports/<timestamp>/report.md` (failing gates first
 problem), `report.json`, and a log per gate. The newest 5 runs are kept. Other useful options:
 `--only=lint,build` and `--skip=bundle-size`.
 
-After changing the `AudioQueue` class, run `npm run generate` to regenerate the top-level
+After changing a function in `src/queue.ts`, run `npm run generate` to regenerate the top-level
 functions, and `npm run api:update` if the public API changed on purpose.
 
 ## License

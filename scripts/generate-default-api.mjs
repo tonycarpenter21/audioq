@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Generates src/default-queue.ts: one top-level function per public AudioQueue method, each
- * calling the lazily created default queue and carrying the method's JSDoc.
+ * Generates src/default-queue.ts: one top-level function per queue function in src/queue.ts
+ * (those whose first parameter is the queue), each running on the lazily created default queue
+ * and carrying the function's JSDoc without the queue parameter.
  *
  *   node scripts/generate-default-api.mjs           write the file
  *   node scripts/generate-default-api.mjs --check   exit 1 if the file is out of date
@@ -13,45 +14,58 @@ import * as prettier from 'prettier';
 import ts from 'typescript';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const sourcePath = join(root, 'src/audio-queue.ts');
+const sourcePath = join(root, 'src/queue.ts');
 const targetPath = join(root, 'src/default-queue.ts');
 
-/** Reads public, non-static methods of AudioQueue with JSDoc, parameters and return type. */
-export const readPublicMethods = (path = sourcePath) => {
+/** Turns a queue function's JSDoc into the default function's: no queue parameter or argument. */
+const withoutQueue = (doc, name) =>
+  doc
+    .split('\n')
+    .filter((line) => !/^\s*\* @param queue\b/.test(line))
+    .join('\n')
+    .replace(
+      new RegExp(`\\b${name}\\(queue(, |\\))`, 'g'),
+      (_, rest) => `${name}(${rest === ')' ? ')' : ''}`
+    );
+
+/**
+ * Reads the exported queue functions of src/queue.ts (first parameter `queue`) with their JSDoc,
+ * remaining parameters and return type.
+ */
+export const readQueueFunctions = (path = sourcePath) => {
   const text = readFileSync(path, 'utf8');
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
-  const methods = [];
+  const functions = [];
   file.forEachChild((node) => {
-    if (!ts.isClassDeclaration(node) || node.name?.text !== 'AudioQueue') return;
-    for (const member of node.members) {
-      if (!ts.isMethodDeclaration(member) || !member.name || !ts.isIdentifier(member.name))
-        continue;
-      const modifiers = ts.getModifiers(member) ?? [];
-      const hidden = modifiers.some((m) =>
-        [
-          ts.SyntaxKind.PrivateKeyword,
-          ts.SyntaxKind.ProtectedKeyword,
-          ts.SyntaxKind.StaticKeyword
-        ].includes(m.kind)
-      );
-      if (hidden) continue;
-      const jsDoc = member.jsDoc?.[0];
-      // Defaults stay in AudioQueue: a parameter with a default becomes optional here and
-      // undefined is passed through, so the method applies its own default.
-      const parameters = member.parameters.map((parameter) => {
-        const name = parameter.name.getText(file);
-        const optional = parameter.questionToken || parameter.initializer ? '?' : '';
-        return { name, text: `${name}${optional}: ${parameter.type?.getText(file) ?? 'unknown'}` };
-      });
-      methods.push({
-        doc: jsDoc ? text.slice(jsDoc.pos, jsDoc.end).trim() : '',
-        name: member.name.text,
-        parameters,
-        returnType: member.type?.getText(file) ?? 'unknown'
-      });
-    }
+    if (!ts.isFunctionDeclaration(node) || !node.name) return;
+    const exported = (ts.getModifiers(node) ?? []).some(
+      (m) => m.kind === ts.SyntaxKind.ExportKeyword
+    );
+    const [first, ...rest] = node.parameters;
+    if (!exported || first?.name.getText(file) !== 'queue') return;
+    const jsDoc = node.jsDoc?.[0];
+    const name = node.name.text;
+    // Defaults stay in src/queue.ts: a parameter with a default becomes optional here and
+    // undefined is passed through, so the queue function applies its own default.
+    const parameters = rest.map((parameter) => {
+      const parameterName = parameter.name.getText(file);
+      const optional = parameter.questionToken || parameter.initializer ? '?' : '';
+      return {
+        name: parameterName,
+        text: `${parameterName}${optional}: ${parameter.type?.getText(file) ?? 'unknown'}`
+      };
+    });
+    functions.push({
+      doc: jsDoc ? withoutQueue(text.slice(jsDoc.getStart(file), jsDoc.end).trim(), name) : '',
+      name,
+      parameters,
+      returnType: node.type?.getText(file) ?? 'unknown',
+      typeParameters: node.typeParameters
+        ? `<${node.typeParameters.map((parameter) => parameter.getText(file)).join(', ')}>`
+        : ''
+    });
   });
-  return methods;
+  return functions;
 };
 
 /** Type names exported by src/types.ts, so generated signatures can import what they use. */
@@ -81,34 +95,38 @@ const reindent = (doc) =>
     .join('\n');
 
 /** Builds the contents of src/default-queue.ts, formatted with the repo's Prettier config. */
-export const renderDefaultApi = async (methods = readPublicMethods()) => {
+export const renderDefaultApi = async (methods = readQueueFunctions()) => {
   const header = `/**
- * @fileoverview Top-level functions bound to a shared default AudioQueue.
- * GENERATED by scripts/generate-default-api.mjs from src/audio-queue.ts. Do not edit by hand:
- * run \`npm run generate\` after changing AudioQueue.
+ * @fileoverview The top-level functions of 'audioq': each runs on a shared default queue.
+ * GENERATED by scripts/generate-default-api.mjs from src/queue.ts. Do not edit by hand:
+ * run \`npm run generate\` after changing src/queue.ts.
  */
 
-import { AudioQueue } from './audio-queue.js';
+import * as onQueue from './queue.js';
+import { createAudioQueue } from './queue.js';
+import type { AudioQueue } from './queue.js';
 __TYPE_IMPORTS__
 let defaultQueue: AudioQueue | undefined;
 
 /**
  * Returns the shared queue used by the top-level functions, creating it on first use.
  * Creating it lazily keeps importing audioq free of side effects (safe for SSR).
- * @returns The default AudioQueue
+ * @returns The default queue
  */
 export const getDefaultAudioQueue = (): AudioQueue => {
-  defaultQueue ??= new AudioQueue();
+  defaultQueue ??= createAudioQueue();
   return defaultQueue;
 };
 `;
-  const functions = methods.map(({ doc, name, parameters, returnType }) => {
+  const functions = methods.map(({ doc, name, parameters, returnType, typeParameters }) => {
     const signature = parameters.map((parameter) => parameter.text).join(', ');
-    const call = parameters.map((parameter) => parameter.name).join(', ');
+    const call = ['getDefaultAudioQueue()', ...parameters.map((parameter) => parameter.name)].join(
+      ', '
+    );
     return `
 ${reindent(doc)}
-export const ${name} = (${signature}): ${returnType} =>
-  getDefaultAudioQueue().${name}(${call});
+export const ${name} = ${typeParameters}(${signature}): ${returnType} =>
+  onQueue.${name}(${call});
 `;
   });
   const used = readTypeNames().filter((typeName) =>

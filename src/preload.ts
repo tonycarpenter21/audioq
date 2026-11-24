@@ -3,7 +3,8 @@
  * offline and can seek without the server's Range support.
  */
 
-import type { AudioQueue } from './audio-queue.js';
+import type { AudioQueue } from './queue.js';
+import { getQueueConfig } from './queue.js';
 import { getDefaultAudioQueue } from './default-queue.js';
 import { resolveUrl, toError } from './media.js';
 import { forgetMemory, memoryOf, peekMemory } from './memory.js';
@@ -72,7 +73,7 @@ const preloadOne = (queue: AudioQueue, url: string): Promise<PreloadResult> => {
   if (running) return running;
   // Released (or the queue destroyed) while downloading: the download is no longer the current one.
   const isCurrent = (): boolean => peekMemory(queue)?.downloads.get(url) === attempt;
-  const attempt: Promise<PreloadResult> = download(url, queue.getQueueConfig().loadTimeoutMs).then(
+  const attempt: Promise<PreloadResult> = download(url, getQueueConfig(queue).loadTimeoutMs).then(
     (blob) => {
       if (isCurrent()) {
         memory.downloads.delete(url);

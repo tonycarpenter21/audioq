@@ -8,9 +8,12 @@ A rewrite focused on correctness, small size and predictable behaviour. Most cod
 top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the breaking changes.
 
 ### Added
-- **`createAudioQueue(config)`**: independent queues with their own configuration (several
-  players on one page, isolated tests). The top-level functions use a lazily created default
-  queue, so importing audioq has no side effects and is safe during server-side rendering.
+- **`createAudioQueue(config)`** and the **`audioq/queue`** entry point: independent queues with
+  their own configuration (several players on one page, isolated tests), used through plain
+  functions that take the queue first (`queueAudio(queue, '/a.mp3')`). A queue is an opaque value
+  with no methods, so bundlers drop every function an app does not import. The top-level
+  functions of `audioq` use a lazily created default queue, so importing audioq has no side
+  effects and is safe during server-side rendering.
 - **Item handles**: `queueAudio` resolves to `{ id, src, channelNumber, started, finished }`.
   `started` resolves `true`/`false`; `finished` resolves `'ended' | 'stopped' | 'error' |
   'removed'`. Both always settle.
@@ -26,7 +29,7 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
 - `AudioCompleteInfo.reason` (`'ended' | 'stopped' | 'error'`), `QueueItem.id`,
   `AudioErrorType.AutoplayBlocked`, `crossOrigin` item option, `logger` and `maxChannels` config.
 - Dual ESM + CommonJS build with an `exports` map and `sideEffects: false` (tree-shakable).
-  About 9 KB minified and gzipped with every feature, down from about 30 KB gzipped in 2.x.
+  About 13 KB minified and gzipped with every feature (8 KB for `queueAudio` alone), down from about 30 KB gzipped in 2.x.
 - **Blob and File sources**: `queueAudio(blob)` for fetched or generated audio (text-to-speech);
   object URLs are created and revoked for you.
 - **Item metadata** (`metadata` option): title, artist, artwork and any fields of your own,

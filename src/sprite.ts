@@ -3,7 +3,8 @@
  * helper, so apps that do not use it do not ship it.
  */
 
-import type { AudioQueue } from './audio-queue.js';
+import type { AudioQueue } from './queue.js';
+import { queueAudio } from './queue.js';
 import { getDefaultAudioQueue } from './default-queue.js';
 import type { AudioQueueOptions, QueuedAudio } from './types.js';
 
@@ -62,7 +63,7 @@ export const defineSprite = <Name extends string>(
         return Promise.reject(new RangeError(`Unknown sprite "${name}"`));
       }
       const { endMs, loop, startMs } = segmentOf(segment);
-      return (queue ?? getDefaultAudioQueue()).queueAudio(source, channelNumber, {
+      return queueAudio(queue ?? getDefaultAudioQueue(), source, channelNumber, {
         ...options,
         endAt: endMs,
         loop: options.loop ?? loop,

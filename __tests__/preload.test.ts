@@ -1,8 +1,17 @@
 /**
  * @fileoverview Tests for preloading: files downloaded into memory and played from object URLs.
  */
-import { createAudioQueue } from '../src/audio-queue';
-import type { AudioQueue } from '../src/audio-queue';
+import {
+  createAudioQueue,
+  destroyAllChannels,
+  getCurrentAudioInfo,
+  getQueueSnapshot,
+  queueAudio,
+  setChannelVolume,
+  setRepeatMode,
+  stopAllAudioInChannel
+} from '../src/queue';
+import type { AudioQueue } from '../src/queue';
 import { getDefaultAudioQueue } from '../src/default-queue';
 import {
   isAudioPreloaded,
@@ -70,18 +79,18 @@ describe('preloadAudio', () => {
     ]);
     expect(isAudioPreloaded('/sfx/coin.mp3', queue)).toBe(true);
 
-    const item = await queue.queueAudio('/sfx/coin.mp3');
+    const item = await queueAudio(queue, '/sfx/coin.mp3');
     expect(item.src).toBe(`${BASE}/sfx/coin.mp3`);
-    expect(queue.getQueueSnapshot()?.items[0]?.fileName).toBe('coin.mp3');
+    expect(getQueueSnapshot(queue)?.items[0]?.fileName).toBe('coin.mp3');
     expect(audioAt(0).src).toBe('blob:http://localhost/object-1');
-    expect(queue.getCurrentAudioInfo()?.src).toBe(`${BASE}/sfx/coin.mp3`);
+    expect(getCurrentAudioInfo(queue)?.src).toBe(`${BASE}/sfx/coin.mp3`);
   });
 
   test('each queued copy gets its own object URL, revoked when that item is released', async () => {
     const queue = setup();
     await preloaded(queue, '/a.mp3');
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     expect(urls.create).toHaveBeenCalledTimes(2);
     await flush();
     audioAt(0).finish();
@@ -126,7 +135,7 @@ describe('preloadAudio', () => {
     await flush();
     net.fail(`${BASE}/a.mp3`);
     await done;
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     expect(audioAt(0).src).toBe(`${BASE}/a.mp3`);
     void preloadAudio('/a.mp3', queue);
     await flush();
@@ -172,12 +181,12 @@ describe('the default queue', () => {
     net.respond(`${BASE}/default.mp3`);
     await done;
     expect(isAudioPreloaded('/default.mp3')).toBe(true);
-    await queue.queueAudio('/default.mp3');
+    await queueAudio(queue, '/default.mp3');
     expect(audioAt(0).src).toMatch(/^blob:/);
     releasePreloadedAudio('/default.mp3');
     expect(isAudioPreloaded('/default.mp3')).toBe(false);
     releasePreloadedAudio();
-    await queue.destroyAllChannels();
+    await destroyAllChannels(queue);
   });
 });
 
@@ -186,13 +195,13 @@ describe('releasePreloadedAudio', () => {
     const queue = setup();
     await preloaded(queue, '/a.mp3');
     await preloaded(queue, '/b.mp3');
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     releasePreloadedAudio('/a.mp3', queue);
     expect(isAudioPreloaded('/a.mp3', queue)).toBe(false);
     expect(isAudioPreloaded('/b.mp3', queue)).toBe(true);
     expect(urls.revoke).not.toHaveBeenCalled();
     expect(audioAt(0).src).toBe('blob:http://localhost/object-1');
-    await queue.queueAudio('/a.mp3', 1);
+    await queueAudio(queue, '/a.mp3', 1);
     expect(audioAt(1).src).toBe(`${BASE}/a.mp3`);
   });
 
@@ -241,7 +250,7 @@ describe('releasePreloadedAudio', () => {
   test('destroyAllChannels releases preloaded files', async () => {
     const queue = setup();
     await preloaded(queue, '/a.mp3');
-    await queue.destroyAllChannels();
+    await destroyAllChannels(queue);
     expect(isAudioPreloaded('/a.mp3', queue)).toBe(false);
   });
 });
@@ -250,15 +259,15 @@ describe('preloaded items and the rest of the queue', () => {
   test('repeat one passes the object URL to the replay and revokes it once at the end', async () => {
     const queue = setup();
     await preloaded(queue, '/a.mp3');
-    queue.setRepeatMode(0, 'one');
-    await queue.queueAudio('/a.mp3');
+    setRepeatMode(queue, 0, 'one');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     audioAt(0).finish();
     await flush();
     expect(urls.create).toHaveBeenCalledTimes(1);
     expect(urls.revoke).not.toHaveBeenCalled();
-    queue.setRepeatMode(0, 'off');
-    await queue.stopAllAudioInChannel(0);
+    setRepeatMode(queue, 0, 'off');
+    await stopAllAudioInChannel(queue, 0);
     expect(urls.revoke).toHaveBeenCalledTimes(1);
   });
 
@@ -266,14 +275,14 @@ describe('preloaded items and the rest of the queue', () => {
     installFakeAudioContext();
     setUserAgent(IPHONE_UA);
     const queue = setup({ webAudio: 'auto' });
-    await queue.setChannelVolume(0, 0.5);
-    await queue.setChannelVolume(1, 0.5);
+    await setChannelVolume(queue, 0, 0.5);
+    await setChannelVolume(queue, 1, 0.5);
     const done = preloadAudio('https://cdn.other.com/music.mp3', queue);
     await flush();
     net.respond('https://cdn.other.com/music.mp3');
     await done;
-    await queue.queueAudio('https://cdn.other.com/music.mp3');
-    await queue.queueAudio('https://cdn.other.com/streamed.mp3', 1);
+    await queueAudio(queue, 'https://cdn.other.com/music.mp3');
+    await queueAudio(queue, 'https://cdn.other.com/streamed.mp3', 1);
     const context = FakeAudioContext.instances[0] as FakeAudioContext;
     expect(context.sources).toHaveLength(1);
   });
@@ -281,8 +290,8 @@ describe('preloaded items and the rest of the queue', () => {
   test('dedupe compares the original URL, not the object URL', async () => {
     const queue = setup();
     await preloaded(queue, '/a.mp3');
-    await queue.queueAudio('/a.mp3', 0, { dedupeMs: 1000 });
-    const again = await queue.queueAudio('/a.mp3', 0, { dedupeMs: 1000 });
+    await queueAudio(queue, '/a.mp3', 0, { dedupeMs: 1000 });
+    const again = await queueAudio(queue, '/a.mp3', 0, { dedupeMs: 1000 });
     await expect(again.finished).resolves.toBe('skipped');
   });
 });
@@ -321,7 +330,7 @@ describe('withMediaType', () => {
     await flush();
     net.respond(`${BASE}/song.mp3`, 'abc', 200, 'application/octet-stream');
     await done;
-    await queue.queueAudio('/song.mp3');
+    await queueAudio(queue, '/song.mp3');
     expect((urls.create.mock.calls[0] as unknown[])[0]).toMatchObject({ type: 'audio/mpeg' });
   });
 });

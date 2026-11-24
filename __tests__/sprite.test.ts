@@ -1,5 +1,11 @@
-import { createAudioQueue } from '../src/audio-queue';
-import type { AudioQueue } from '../src/audio-queue';
+import {
+  createAudioQueue,
+  destroyAllChannels,
+  getQueueItemInfo,
+  getQueueLength,
+  setQueueConfig
+} from '../src/queue';
+import type { AudioQueue } from '../src/queue';
 import { getDefaultAudioQueue } from '../src/default-queue';
 import { defineSprite } from '../src/sprite';
 import { FakeAudio, advance, audioAt, flush, installFakeAudio } from './helpers/fake-audio';
@@ -34,18 +40,18 @@ describe('defineSprite', () => {
       queue
     );
     await sfx.play('engine', 3, { volume: 0.5 });
-    expect(queue.getQueueItemInfo(0, 3)).toMatchObject({ isLooping: true, volume: 0.5 });
+    expect(getQueueItemInfo(queue, 0, 3)).toMatchObject({ isLooping: true, volume: 0.5 });
     await sfx.play('hit', 4, { loop: true });
-    expect(queue.getQueueItemInfo(0, 4)?.isLooping).toBe(true);
+    expect(getQueueItemInfo(queue, 0, 4)?.isLooping).toBe(true);
     await sfx.play('engine', 5, { loop: false });
-    expect(queue.getQueueItemInfo(0, 5)?.isLooping).toBe(false);
+    expect(getQueueItemInfo(queue, 0, 5)?.isLooping).toBe(false);
   });
 
   test('interrupt lets rapid sounds cut each other off', async () => {
     const sfx = defineSprite('/sfx/sprite.mp3', { coin: [0, 300] }, queue);
     await sfx.play('coin', 0, { interrupt: true });
     await sfx.play('coin', 0, { interrupt: true });
-    expect(queue.getQueueLength()).toBe(1);
+    expect(getQueueLength(queue)).toBe(1);
   });
 
   test('rejects unknown names', async () => {
@@ -62,10 +68,10 @@ describe('defineSprite', () => {
   });
 
   test('uses the default queue when none is given', async () => {
-    getDefaultAudioQueue().setQueueConfig({ logger: null });
+    setQueueConfig(getDefaultAudioQueue(), { logger: null });
     const sfx = defineSprite('/sfx/sprite.mp3', { coin: [0, 300] });
     await sfx.play('coin', 6);
-    expect(getDefaultAudioQueue().getQueueLength(6)).toBe(1);
-    await getDefaultAudioQueue().destroyAllChannels();
+    expect(getQueueLength(getDefaultAudioQueue(), 6)).toBe(1);
+    await destroyAllChannels(getDefaultAudioQueue());
   });
 });

@@ -3,8 +3,8 @@ import * as audioq from '../src/index';
 describe('package entry point', () => {
   test('exports the instance API', () => {
     expect(typeof audioq.createAudioQueue).toBe('function');
-    expect(typeof audioq.AudioQueue).toBe('function');
-    expect(audioq.createAudioQueue({ logger: null })).toBeInstanceOf(audioq.AudioQueue);
+    // A queue is an opaque object: it is passed to the functions of 'audioq/queue'
+    expect(typeof audioq.createAudioQueue({ logger: null })).toBe('object');
   });
 
   test('exports the top-level functions bound to the default queue', () => {

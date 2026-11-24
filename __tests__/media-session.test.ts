@@ -1,5 +1,14 @@
-import { createAudioQueue } from '../src/audio-queue';
-import type { AudioQueue } from '../src/audio-queue';
+import {
+  createAudioQueue,
+  destroyAllChannels,
+  getCurrentAudioInfo,
+  getQueueLength,
+  isChannelPaused,
+  pauseChannel,
+  queueAudio,
+  setQueueConfig
+} from '../src/queue';
+import type { AudioQueue } from '../src/queue';
 import { getDefaultAudioQueue } from '../src/default-queue';
 import { connectMediaSession } from '../src/media-session';
 import { FakeAudio, audioAt, flush, installFakeAudio } from './helpers/fake-audio';
@@ -57,7 +66,7 @@ describe('connectMediaSession', () => {
   test('shows metadata and playing state when an item starts', async () => {
     const session = installSession();
     connectMediaSession({ queue });
-    await queue.queueAudio('/ep42.mp3', 0, {
+    await queueAudio(queue, '/ep42.mp3', 0, {
       metadata: { album: 'Season 2', artist: 'My Podcast', title: 'Episode 42' }
     });
     await flush();
@@ -73,7 +82,7 @@ describe('connectMediaSession', () => {
   test('falls back to the file name as the title', async () => {
     const session = installSession();
     connectMediaSession({ queue });
-    await queue.queueAudio('/sfx/chime.mp3');
+    await queueAudio(queue, '/sfx/chime.mp3');
     await flush();
     expect(session.metadata?.init.title).toBe('chime.mp3');
   });
@@ -81,15 +90,15 @@ describe('connectMediaSession', () => {
   test('buttons control the channel', async () => {
     const session = installSession();
     connectMediaSession({ channel: 2, queue, seekOffsetMs: 5000 });
-    await queue.queueAudio('/a.mp3', 2);
-    await queue.queueAudio('/b.mp3', 2);
+    await queueAudio(queue, '/a.mp3', 2);
+    await queueAudio(queue, '/b.mp3', 2);
     await flush();
     action(session, 'pause');
-    expect(queue.isChannelPaused(2)).toBe(true);
+    expect(isChannelPaused(queue, 2)).toBe(true);
     expect(session.playbackState).toBe('paused');
     action(session, 'play');
     await flush();
-    expect(queue.isChannelPaused(2)).toBe(false);
+    expect(isChannelPaused(queue, 2)).toBe(false);
     action(session, 'seekto', { seekTime: 6 });
     expect(audioAt(0).currentTime).toBe(6);
     action(session, 'seekbackward');
@@ -101,15 +110,15 @@ describe('connectMediaSession', () => {
     action(session, 'previoustrack');
     expect(audioAt(0).currentTime).toBe(0);
     action(session, 'nexttrack');
-    expect(queue.getCurrentAudioInfo(2)?.fileName).toBe('b.mp3');
+    expect(getCurrentAudioInfo(queue, 2)?.fileName).toBe('b.mp3');
     action(session, 'stop');
-    expect(queue.getQueueLength(2)).toBe(0);
+    expect(getQueueLength(queue, 2)).toBe(0);
   });
 
   test('reports position, and clears the session when the queue runs out', async () => {
     const session = installSession();
     connectMediaSession({ queue });
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     audioAt(0).tick(4);
     expect(session.positions[session.positions.length - 1]).toEqual({
@@ -126,8 +135,8 @@ describe('connectMediaSession', () => {
   test('keeps the session while more items are queued', async () => {
     const session = installSession();
     connectMediaSession({ queue });
-    await queue.queueAudio('/a.mp3');
-    await queue.queueAudio('/b.mp3');
+    await queueAudio(queue, '/a.mp3');
+    await queueAudio(queue, '/b.mp3');
     await flush();
     audioAt(0).finish();
     await flush();
@@ -140,7 +149,7 @@ describe('connectMediaSession', () => {
       throw new Error('InvalidStateError');
     });
     connectMediaSession({ queue });
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     expect(() => audioAt(0).tick(1)).not.toThrow();
   });
@@ -149,15 +158,15 @@ describe('connectMediaSession', () => {
     FakeAudio.defaultPlayBehavior = 'resolve-silently';
     const session = installSession();
     connectMediaSession({ queue });
-    await queue.queueAudio('/live.mp3');
+    await queueAudio(queue, '/live.mp3');
     audioAt(0).tick(5);
     expect(session.positions).toEqual([]);
   });
 
   test('shows an item that was already playing when connecting', async () => {
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     await flush();
-    await queue.pauseChannel();
+    await pauseChannel(queue);
     const session = installSession();
     connectMediaSession({ queue });
     expect(session.metadata?.init.title).toBe('a.mp3');
@@ -169,7 +178,7 @@ describe('connectMediaSession', () => {
     const disconnect = connectMediaSession({ queue });
     disconnect();
     expect([...session.handlers.values()].every((handler) => handler === null)).toBe(true);
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     expect(session.metadata).toBeNull();
     expect(session.playbackState).toBe('none');
@@ -186,21 +195,21 @@ describe('connectMediaSession', () => {
     const session = installSession();
     delete (globalThis as { MediaMetadata?: unknown }).MediaMetadata;
     connectMediaSession({ queue });
-    await queue.queueAudio('/a.mp3');
+    await queueAudio(queue, '/a.mp3');
     await flush();
     expect(session.metadata).toBeNull();
     expect(session.playbackState).toBe('playing');
   });
 
   test('uses the default queue when none is given', async () => {
-    getDefaultAudioQueue().setQueueConfig({ logger: null });
+    setQueueConfig(getDefaultAudioQueue(), { logger: null });
     const session = installSession();
     const disconnect = connectMediaSession();
-    await getDefaultAudioQueue().queueAudio('/default.mp3');
+    await queueAudio(getDefaultAudioQueue(), '/default.mp3');
     await flush();
     expect(session.metadata?.init.title).toBe('default.mp3');
     disconnect();
-    await getDefaultAudioQueue().destroyAllChannels();
+    await destroyAllChannels(getDefaultAudioQueue());
   });
 
   test('is a no-op without the Media Session API', () => {

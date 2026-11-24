@@ -24,5 +24,8 @@ for (const [folder, type] of [
   mkdirSync(join(dist, folder), { recursive: true });
   writeFileSync(join(dist, folder, 'package.json'), `${JSON.stringify({ type }, null, 2)}\n`);
 }
-const { names } = await mangleDist();
-console.log(`Built dist/esm, dist/cjs and dist/types (${names.length} internal names shortened)`);
+const { names, prunedDeclarations } = await mangleDist();
+console.log(
+  `Built dist/esm, dist/cjs and dist/types (${names.length} internal names shortened, ` +
+    `${prunedDeclarations.length} internal declaration files dropped)`
+);

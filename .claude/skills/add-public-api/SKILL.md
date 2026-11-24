@@ -10,9 +10,11 @@ front avoids a round of fixes.
 
 ## 1. Decide where it lives
 
-- **A method on `AudioQueue`** (src/audio-queue.ts) when it needs queue internals or every app
-  needs it. It ships in every bundle: check `bundle-size` (the `queueAudio`-only budget is the
-  one most users pay).
+- **A queue function** in src/queue.ts when it needs queue internals: `export function
+name(queue: AudioQueue, …args)`, queue first, with `const engine = engineOf(queue);` to reach
+  the engine. It becomes part of `audioq/queue`, and `npm run generate` adds the matching
+  top-level function (queue argument dropped) to `audioq`. Only apps that import it pay for it,
+  but check `bundle-size` if `queueAudio` itself calls it.
 - **A standalone, tree-shakable function** in its own module when it is optional
   (`defineSprite`, `connectMediaSession`, `createChannelStore`, `preloadAudio`). Signature:
   `(…args, queue: AudioQueue = getDefaultAudioQueue())`, queue last. If the engine must
@@ -26,12 +28,14 @@ front avoids a round of fixes.
   Optional fields are `?: T | undefined` (consumers may use `exactOptionalPropertyTypes`).
 - Object literals looked up with runtime strings must be a `Map` or typed `Record<string, T>`:
   the build renames identifier-like keys (gate `mangle-safety`).
-- Runtime warnings go through `this.config.logger?.warn('audioq: …')`, never `console`.
+- Runtime warnings go through `engine.config.logger?.warn('audioq: …')`, never `console`.
+- Engine members (src/engine.ts) are plain public members of an `@internal` class: the build
+  shortens their names, so never read one with a runtime string.
 
 ## 3. Regenerate and record
 
 ```bash
-npm run generate     # top-level wrappers in src/default-queue.ts (AudioQueue methods only)
+npm run generate     # top-level wrappers in src/default-queue.ts (queue functions only)
 npm run api:update   # api/public-api.json snapshot
 ```
 
@@ -40,7 +44,7 @@ npm run api:update   # api/public-api.json snapshot
 - Behaviour tests in the module's paired test file (`__tests__/<module>.test.ts`, gate
   `test-file-pairing`), using the fakes in `__tests__/helpers/fake-audio.ts` (FakeAudio,
   `installFakeFetch`, `installObjectUrls`, `installFakeAudioContext`).
-- New `AudioQueue` methods: also call the generated wrapper in the "explicitly exercises every
+- New queue functions: also call the generated wrapper in the "explicitly exercises every
   generated wrapper once" test in `__tests__/default-queue.test.ts` (gate
   `exported-symbols-tested`).
 - New exports from index: mention them in `__tests__/index.test.ts`.

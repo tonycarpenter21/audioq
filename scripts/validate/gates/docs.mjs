@@ -45,8 +45,14 @@ export const typecheckExamples = (documentPath) => {
       (line) => /^import\s/.test(line) && !/from 'audioq'/.test(line)
     );
     const body = block.code.filter((line) => !/^import\s/.test(line));
+    // Names the example imports itself (from 'audioq/queue', say) are left out of 'audioq'.
+    const ownImports = new Set(
+      imports
+        .flatMap((line) => (/\{([^}]*)\}/.exec(line)?.[1] ?? '').split(','))
+        .map((n) => n.trim())
+    );
     const header = [
-      `import { ${names.join(', ')} } from 'audioq';`,
+      `import { ${names.filter((name) => !ownImports.has(name)).join(', ')} } from 'audioq';`,
       ...imports,
       'declare const button: HTMLButtonElement;',
       'export async function example(): Promise<void> {'
@@ -66,7 +72,7 @@ export const typecheckExamples = (documentPath) => {
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     noEmit: true,
     noUnusedLocals: false,
-    paths: { audioq: ['src/index.ts'] },
+    paths: { audioq: ['src/index.ts'], 'audioq/queue': ['src/queue.ts'] },
     skipLibCheck: true,
     strict: true,
     target: ts.ScriptTarget.ES2020,

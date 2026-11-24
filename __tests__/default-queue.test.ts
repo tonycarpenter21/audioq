@@ -1,20 +1,18 @@
-import { AudioQueue } from '../src/audio-queue';
 import * as api from '../src/default-queue';
+import { QueueEngine } from '../src/engine';
+import * as onQueue from '../src/queue';
+import { setQueueConfig } from '../src/queue';
 import { getDefaultAudioQueue } from '../src/default-queue';
 import { FakeAudio, flush, installFakeAudio } from './helpers/fake-audio';
 
-/** Public AudioQueue method names, read from the class itself. */
-const classMethods = (): string[] =>
-  Object.getOwnPropertyNames(AudioQueue.prototype).filter(
-    (name) =>
-      name !== 'constructor' &&
-      typeof (AudioQueue.prototype as unknown as Record<string, unknown>)[name] === 'function'
-  );
+/** The queue functions of src/queue.ts: every export except createAudioQueue. */
+const queueFunctions = (): string[] =>
+  Object.keys(onQueue).filter((name) => name !== 'createAudioQueue');
 
 beforeEach(async () => {
   jest.useFakeTimers();
   installFakeAudio();
-  getDefaultAudioQueue().setQueueConfig({ logger: null });
+  setQueueConfig(getDefaultAudioQueue(), { logger: null });
   await api.destroyAllChannels();
 });
 
@@ -23,41 +21,18 @@ afterEach(() => jest.useRealTimers());
 describe('getDefaultAudioQueue', () => {
   test('returns the same lazily created instance every time', () => {
     const queue = getDefaultAudioQueue();
-    expect(queue).toBeInstanceOf(AudioQueue);
+    expect(queue).toBeInstanceOf(QueueEngine);
     expect(getDefaultAudioQueue()).toBe(queue);
   });
 });
 
 describe('top-level functions', () => {
-  test('there is exactly one function per public AudioQueue method', () => {
+  test('there is exactly one top-level function per queue function', () => {
     const exported = Object.keys(api)
       .filter((name) => name !== 'getDefaultAudioQueue')
       .sort();
-    // AudioQueue.prototype holds only the public API; internals live on QueueEngine.prototype.
     expect(exported.length).toBeGreaterThan(50);
-    expect(exported).toEqual(classMethods().sort());
-  });
-
-  test('each function forwards every declared argument and the return value', () => {
-    const queue = getDefaultAudioQueue();
-    const exported = Object.keys(api).filter((name) => name !== 'getDefaultAudioQueue');
-    for (const name of exported) {
-      const fn = (api as unknown as Record<string, (...args: unknown[]) => unknown>)[name];
-      if (!fn) throw new Error(`missing ${name}`);
-      const args = Array.from({ length: fn.length }, (_unused, i) => `arg${i}`);
-      const spy = jest
-        .spyOn(queue, name as keyof AudioQueue)
-        .mockReturnValue(`result:${name}` as never);
-      expect(fn(...args)).toBe(`result:${name}`);
-      expect(spy).toHaveBeenCalledWith(...args);
-      spy.mockRestore();
-    }
-  });
-
-  test('omitted optional arguments are passed as undefined so AudioQueue defaults apply', () => {
-    const spy = jest.spyOn(getDefaultAudioQueue(), 'getQueueLength').mockReturnValue(0);
-    api.getQueueLength();
-    expect(spy).toHaveBeenCalledWith(undefined);
+    expect(exported).toEqual(queueFunctions().sort());
   });
 
   test('works end to end without creating a queue explicitly', async () => {

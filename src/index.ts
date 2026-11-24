@@ -6,7 +6,8 @@
  * - `createAudioQueue()` makes independent queues with their own configuration.
  */
 
-export { AudioQueue, createAudioQueue } from './audio-queue.js';
+export { createAudioQueue } from './queue.js';
+export type { AudioQueue } from './queue.js';
 export { PLAYBACK_RATE_RANGE, getFadeConfig } from './config.js';
 export * from './default-queue.js';
 export { connectMediaSession } from './media-session.js';

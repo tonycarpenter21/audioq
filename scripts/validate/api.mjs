@@ -1,6 +1,7 @@
 /**
- * Reads the public API of src/index.ts with the TypeScript checker. Used by the API snapshot
- * gate, the README coverage gate and `npm run api:update`.
+ * Reads the public API of each entry point ('audioq' = src/index.ts, 'audioq/queue' =
+ * src/queue.ts) with the TypeScript checker. Used by the API snapshot gate, the README coverage
+ * gate and `npm run api:update`.
  */
 import { abs, ts } from './lib.mjs';
 
@@ -69,12 +70,16 @@ const describeSymbol = (checker, symbol) => {
   return { kind, signature: checker.typeToString(type, undefined, flags) };
 };
 
+/** Source file of each package entry point, keyed by the specifier users import. */
+export const ENTRY_POINTS = { audioq: 'src/index.ts', 'audioq/queue': 'src/queue.ts' };
+
 /**
- * Describes every export of src/index.ts.
+ * Describes every export of one entry point's source file.
+ * @param {string} [source] the entry point's source file (default: src/index.ts)
  * @returns {Record<string, { kind: string, signature: string }>} sorted by name
  */
-export const readPublicApi = () => {
-  const entry = abs('src/index.ts');
+export const readPublicApi = (source = ENTRY_POINTS.audioq) => {
+  const entry = abs(source);
   const program = ts.createProgram([entry], compilerOptions);
   const checker = program.getTypeChecker();
   const moduleSymbol = checker.getSymbolAtLocation(program.getSourceFile(entry));
@@ -83,6 +88,20 @@ export const readPublicApi = () => {
     .getExportsOfModule(moduleSymbol)
     .sort((a, b) => a.name.localeCompare(b.name))) {
     result[symbol.name] = describeSymbol(checker, symbol);
+  }
+  return result;
+};
+
+/**
+ * Describes every entry point: exports of 'audioq' under their own name, exports of other entry
+ * points as `<specifier>:<name>` (for example `audioq/queue:queueAudio`).
+ */
+export const readPublishedApi = () => {
+  const result = {};
+  for (const [specifier, source] of Object.entries(ENTRY_POINTS)) {
+    for (const [name, description] of Object.entries(readPublicApi(source))) {
+      result[specifier === 'audioq' ? name : `${specifier}:${name}`] = description;
+    }
   }
   return result;
 };

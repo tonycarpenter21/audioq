@@ -87,7 +87,9 @@ loaded. Nothing changes for you unless you relied on every file downloading imme
 
 ## New
 
-- `createAudioQueue(config)` and `getDefaultAudioQueue()` for independent queues.
+- `createAudioQueue(config)` and `getDefaultAudioQueue()` for independent queues, used with the
+  functions of `audioq/queue` (same names as the top-level functions, queue first):
+  `import { createAudioQueue, queueAudio } from 'audioq/queue'; queueAudio(createAudioQueue(), '/a.mp3');`
 - `unlockAudio()` to start blocked audio from your own click handler.
 - Config options `loadTimeoutMs`, `prefetchCount`, `logger`, `maxChannels`, `webAudio`,
   `historySize`, `pauseWhenHidden`.

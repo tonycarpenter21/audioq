@@ -5,10 +5,10 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { API_SNAPSHOT_PATH, readPublicApi } from './api.mjs';
+import { API_SNAPSHOT_PATH, readPublishedApi } from './api.mjs';
 import { abs } from './lib.mjs';
 
-const api = readPublicApi();
+const api = readPublishedApi();
 mkdirSync(dirname(abs(API_SNAPSHOT_PATH)), { recursive: true });
 writeFileSync(abs(API_SNAPSHOT_PATH), `${JSON.stringify(api, null, 2)}\n`);
 console.log(`Wrote ${API_SNAPSHOT_PATH} (${Object.keys(api).length} exports)`);

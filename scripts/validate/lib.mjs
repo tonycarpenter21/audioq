@@ -187,21 +187,30 @@ export const runtimeExports = (path) => {
   return exportsFound;
 };
 
-/** Public methods, accessors and function-valued properties of a class declaration. */
+/** Whether a declaration's JSDoc has an `@internal` tag. */
+export const isInternal = (node) =>
+  ts.getJSDocTags(node).some((tag) => tag.tagName.text === 'internal');
+
+/**
+ * Public methods, accessors and function-valued properties of a class declaration. A class tagged
+ * `@internal` (QueueEngine) is not reachable from the package's entry points, so it has none.
+ */
 export const publicMembers = (classNode) =>
-  classNode.members.filter(
-    (member) =>
-      (ts.isMethodDeclaration(member) ||
-        ts.isGetAccessorDeclaration(member) ||
-        (ts.isPropertyDeclaration(member) &&
-          member.initializer !== undefined &&
-          (ts.isArrowFunction(member.initializer) ||
-            ts.isFunctionExpression(member.initializer)))) &&
-      member.name &&
-      ts.isIdentifier(member.name) &&
-      !hasModifier(member, ts.SyntaxKind.PrivateKeyword) &&
-      !hasModifier(member, ts.SyntaxKind.ProtectedKeyword)
-  );
+  isInternal(classNode)
+    ? []
+    : classNode.members.filter(
+        (member) =>
+          (ts.isMethodDeclaration(member) ||
+            ts.isGetAccessorDeclaration(member) ||
+            (ts.isPropertyDeclaration(member) &&
+              member.initializer !== undefined &&
+              (ts.isArrowFunction(member.initializer) ||
+                ts.isFunctionExpression(member.initializer)))) &&
+          member.name &&
+          ts.isIdentifier(member.name) &&
+          !hasModifier(member, ts.SyntaxKind.PrivateKeyword) &&
+          !hasModifier(member, ts.SyntaxKind.ProtectedKeyword)
+      );
 
 /**
  * Identifiers used in a file's code. String literals and import declarations do not count, so a

@@ -1,6 +1,6 @@
 /**
- * @fileoverview QueueEngine: the internal playback engine behind AudioQueue (channels, item
- * lifecycle, gain, ducking, autoplay unlock). AudioQueue extends it with the public API.
+ * @fileoverview QueueEngine: the internal playback engine behind every AudioQueue (channels, item
+ * lifecycle, gain, ducking, autoplay unlock). The functions in queue.ts are its public API.
  *
  * Design rules that keep it correct:
  * - Every queue mutation is synchronous, so no locks are needed.
@@ -147,23 +147,26 @@ const crossfadeLength = (channel: Channel, item: Item, end: number): number =>
   Math.min(channel.crossfadeMs, (end - item.segmentStart) / 2);
 
 /**
- * Internal state and playback machinery shared by every AudioQueue. Not part of the public API.
+ * Internal state and playback machinery: the object behind every AudioQueue. Callers only ever see
+ * the opaque AudioQueue type and use the functions of queue.ts, so its members are not public API
+ * (the build shortens their names).
+ * @internal
  */
 export class QueueEngine {
-  protected readonly channels: Map<number, Channel> = new Map();
-  protected config: QueueConfig;
-  protected ducking: VolumeConfig | undefined;
-  protected readonly emitter: Emitter<QueueEvents>;
-  protected globalVolume: number = 1;
-  protected globalMuted: boolean = false;
-  protected nextId: number = 1;
-  protected unlockArmed: boolean = false;
-  protected visibilityArmed: boolean = false;
-  protected readonly webAudio: WebAudioEngine = new WebAudioEngine();
+  readonly channels: Map<number, Channel> = new Map();
+  config: QueueConfig;
+  ducking: VolumeConfig | undefined;
+  readonly emitter: Emitter<QueueEvents>;
+  globalVolume: number = 1;
+  globalMuted: boolean = false;
+  nextId: number = 1;
+  unlockArmed: boolean = false;
+  visibilityArmed: boolean = false;
+  readonly webAudio: WebAudioEngine = new WebAudioEngine();
   /** Elements that have played: iOS lets them play again without a user gesture. */
-  protected readonly trustedElements: WeakSet<HTMLAudioElement> = new WeakSet();
+  readonly trustedElements: WeakSet<HTMLAudioElement> = new WeakSet();
   /** Released trusted elements, for items the browser refuses to start (see onPlayRejected). */
-  protected spareElements: HTMLAudioElement[] = [];
+  spareElements: HTMLAudioElement[] = [];
 
   /**
    * @param config - Configuration overrides; see {@link QueueConfig}
@@ -181,7 +184,7 @@ export class QueueEngine {
     this.syncVisibilityListener();
   }
 
-  protected subscribe<K extends keyof QueueEvents>(
+  subscribe<K extends keyof QueueEvents>(
     event: K,
     channelNumber: number,
     callback: (payload: QueueEvents[K]) => void
@@ -190,7 +193,7 @@ export class QueueEngine {
     return this.emitter.on(event, channelNumber, callback);
   }
 
-  protected channel(channelNumber: number): Channel {
+  channel(channelNumber: number): Channel {
     assertChannelNumber(channelNumber, this.config.maxChannels);
     let channel = this.channels.get(channelNumber);
     if (!channel) {
@@ -202,16 +205,16 @@ export class QueueEngine {
     return channel;
   }
 
-  protected existing(channelNumber: number): Channel | undefined {
+  existing(channelNumber: number): Channel | undefined {
     return this.channels.get(channelNumber);
   }
 
-  protected perChannel<T>(read: (channel: Channel | undefined) => T): T[] {
+  perChannel<T>(read: (channel: Channel | undefined) => T): T[] {
     const highest = Math.max(-1, ...this.channels.keys());
     return Array.from({ length: highest + 1 }, (_unused, n) => read(this.channels.get(n)));
   }
 
-  protected makeRoom(channel: Channel, override: number | undefined): void {
+  makeRoom(channel: Channel, override: number | undefined): void {
     const limit = override ?? channel.maxQueueSize ?? this.config.defaultMaxQueueSize;
     if (limit === undefined || channel.items.length < limit) return;
     if (this.config.showQueueWarnings) {
@@ -227,7 +230,7 @@ export class QueueEngine {
     throw new Error(`Queue size limit exceeded for channel ${channel.channelNumber}`);
   }
 
-  protected createItem(
+  createItem(
     source: AudioSource,
     channelNumber: number,
     options: AudioQueueOptions
@@ -258,7 +261,7 @@ export class QueueEngine {
    * Works out where an item plays from. Blobs and preloaded URLs play from memory through an
    * object URL owned by the item; `src` stays the URL the caller gave.
    */
-  protected resolveSource(
+  resolveSource(
     source: AudioSource,
     options: AudioQueueOptions
   ): { fileName: string; objectUrl: string | undefined; src: string } {
@@ -276,7 +279,7 @@ export class QueueEngine {
   }
 
   /** Creates an item plus its public handle from already-normalized settings. */
-  protected buildItem(
+  buildItem(
     channelNumber: number,
     settings: Pick<
       Item,
@@ -329,11 +332,7 @@ export class QueueEngine {
   }
 
   /** A handle for a call that was ignored (dedupe): it never plays. */
-  protected skippedHandle(
-    channelNumber: number,
-    src: string,
-    options: AudioQueueOptions
-  ): QueuedAudio {
+  skippedHandle(channelNumber: number, src: string, options: AudioQueueOptions): QueuedAudio {
     return {
       channelNumber,
       finished: Promise.resolve('skipped'),
@@ -345,7 +344,7 @@ export class QueueEngine {
   }
 
   /** Adds an already-validated source to a channel (the body of queueAudio). */
-  protected enqueue(
+  enqueue(
     channel: Channel,
     source: AudioSource,
     url: string | undefined,
@@ -370,7 +369,7 @@ export class QueueEngine {
   }
 
   /** Makes sure the current item is playing (unless paused) and upcoming items are preloaded. */
-  protected refresh(channel: Channel): void {
+  refresh(channel: Channel): void {
     channel.items.forEach((item, index) => {
       if (index <= this.config.prefetchCount) this.ensureElement(channel, item);
       else if (item.element) this.unload(item);
@@ -385,11 +384,7 @@ export class QueueEngine {
     this.updateDucking();
   }
 
-  protected ensureElement(
-    channel: Channel,
-    item: Item,
-    reuse?: HTMLAudioElement
-  ): HTMLAudioElement {
+  ensureElement(channel: Channel, item: Item, reuse?: HTMLAudioElement): HTMLAudioElement {
     if (item.element) return item.element;
     const element = reuse ?? new Audio();
     element.preload = 'auto';
@@ -458,7 +453,7 @@ export class QueueEngine {
    * element routed through Web Audio loses lock-screen and background playback and can drift out
    * of sync on pause and resume (WebKit bugs 204228, 237323, 261554).
    */
-  protected routeThroughWebAudio(channel: Channel, item: Item, element: HTMLAudioElement): void {
+  routeThroughWebAudio(channel: Channel, item: Item, element: HTMLAudioElement): void {
     if (item.route) return;
     const forFeature = this.needsWebAudioFeature(channel);
     if (!forFeature && !this.needsWebAudioVolume(channel)) return;
@@ -481,13 +476,13 @@ export class QueueEngine {
   }
 
   /** Panning and analysers need Web Audio on every platform. */
-  protected needsWebAudioFeature(channel: Channel): boolean {
+  needsWebAudioFeature(channel: Channel): boolean {
     const wanted = channel.pan !== 0 || channel.analyser !== undefined;
     return wanted && this.config.webAudio !== 'off' && isWebAudioSupported();
   }
 
   /** Volume needs Web Audio in 'force' mode, and on iOS while it is between silent and full. */
-  protected needsWebAudioVolume(channel: Channel): boolean {
+  needsWebAudioVolume(channel: Channel): boolean {
     const mode = this.config.webAudio;
     if (!shouldUseWebAudio(mode)) return false;
     const gain = channel.effectiveGain(this.masterGain());
@@ -498,7 +493,7 @@ export class QueueEngine {
    * Applies a channel's pan and analyser to its playing items, routing them through Web Audio
    * first if needed.
    */
-  protected applyWebAudio(channel: Channel): void {
+  applyWebAudio(channel: Channel): void {
     for (const item of [channel.head, channel.outgoing]) {
       if (!item?.element) continue;
       this.routeThroughWebAudio(channel, item, item.element);
@@ -509,7 +504,7 @@ export class QueueEngine {
     this.applyGain(channel);
   }
 
-  protected play(channel: Channel, item: Item): Promise<void> {
+  play(channel: Channel, item: Item): Promise<void> {
     const element = this.ensureElement(channel, item);
     item.playRequested = true;
     this.applyGain(channel);
@@ -534,7 +529,7 @@ export class QueueEngine {
    * a released element that has played, and retrying once, lets queues keep going.
    * @returns Whether a retry was started
    */
-  protected retryOnSpareElement(channel: Channel, item: Item): boolean {
+  retryOnSpareElement(channel: Channel, item: Item): boolean {
     const spare = this.spareElements.pop();
     if (!spare || item.onSpareElement) {
       if (spare) this.spareElements.push(spare);
@@ -547,7 +542,7 @@ export class QueueEngine {
     return true;
   }
 
-  protected onPlaying(channel: Channel, item: Item): void {
+  onPlaying(channel: Channel, item: Item): void {
     if (item.element) this.trustedElements.add(item.element);
     item.blocked = false;
     this.clearLoadTimer(item);
@@ -566,7 +561,7 @@ export class QueueEngine {
     });
   }
 
-  protected onPlayRejected(channel: Channel, item: Item, error: unknown): void {
+  onPlayRejected(channel: Channel, item: Item, error: unknown): void {
     if (channel.head !== item || item.settled || channel.paused) return;
     const type = categorizePlayError(error);
     if (type === null) return; // play() was interrupted by pause() or a source change
@@ -583,7 +578,7 @@ export class QueueEngine {
     this.fail(channel, item, type, toError(error, 'Playback failed'));
   }
 
-  protected onElementError(channel: Channel, item: Item): void {
+  onElementError(channel: Channel, item: Item): void {
     const mediaError = item.element?.error;
     const type = categorizeMediaError(mediaError);
     const message = mediaError?.message ?? '';
@@ -601,14 +596,14 @@ export class QueueEngine {
     this.refresh(channel);
   }
 
-  protected fail(channel: Channel, item: Item, type: AudioErrorType, error: Error): void {
+  fail(channel: Channel, item: Item, type: AudioErrorType, error: Error): void {
     this.emitError(channel, item, type, error, channel.items.length - 1);
     // An error listener may already have skipped or stopped the item; never advance twice.
     if (channel.head === item && !item.settled) this.advance(channel, 'error');
   }
 
   /** Removes the current item and moves on to the next one. */
-  protected advance(channel: Channel, reason: CompletionReason): void {
+  advance(channel: Channel, reason: CompletionReason): void {
     const head = channel.items.shift();
     if (!head) return;
     // Skipping (`stopped`) plays the next item; an item that ends or fails while the user paused
@@ -630,23 +625,13 @@ export class QueueEngine {
   }
 
   /** Reports a finished item (complete event and history), then releases it. */
-  protected retire(
-    channel: Channel,
-    item: Item,
-    reason: CompletionReason,
-    remainingInQueue: number
-  ): void {
+  retire(channel: Channel, item: Item, reason: CompletionReason, remainingInQueue: number): void {
     this.report(channel, item, reason, remainingInQueue);
     this.finalize(item, reason);
   }
 
   /** Emits the complete event for an item and records it in the channel history. */
-  protected report(
-    channel: Channel,
-    item: Item,
-    reason: CompletionReason,
-    remainingInQueue: number
-  ): void {
+  report(channel: Channel, item: Item, reason: CompletionReason, remainingInQueue: number): void {
     const entry = {
       channelNumber: channel.channelNumber,
       fileName: item.fileName,
@@ -661,7 +646,7 @@ export class QueueEngine {
   }
 
   /** Removes every item from a channel: the current one is reported as stopped. */
-  protected clearChannel(channel: Channel): void {
+  clearChannel(channel: Channel): void {
     const removed = channel.items.splice(0, channel.items.length);
     channel.paused = false;
     channel.pendingPause = false;
@@ -677,7 +662,7 @@ export class QueueEngine {
   }
 
   /** An item reached its end: repeat it, re-queue it, or move on. */
-  protected onEnded(channel: Channel, item: Item): void {
+  onEnded(channel: Channel, item: Item): void {
     if (channel.repeat === 'one') {
       this.retireForRepeat(channel, item);
       return;
@@ -687,7 +672,7 @@ export class QueueEngine {
   }
 
   /** Repeat-one: report the play-through, then play the same item again from the start. */
-  protected retireForRepeat(channel: Channel, item: Item): void {
+  retireForRepeat(channel: Channel, item: Item): void {
     this.report(channel, item, 'ended', channel.items.length - 1);
     this.exitCues(item);
     item.started = false;
@@ -700,7 +685,7 @@ export class QueueEngine {
   }
 
   /** Repeat-all: a fresh copy of a finished item for the end of the queue. */
-  protected copyForRepeat(item: Item): Item {
+  copyForRepeat(item: Item): Item {
     const { item: copy } = this.buildItem(item.channelNumber, {
       crossOrigin: item.crossOrigin,
       cues: item.cues,
@@ -725,7 +710,7 @@ export class QueueEngine {
    * until the next of those moments. Browsers only report the position about 4 times a second,
    * which is too coarse for short sprites, so a timer wakes the tracker at the exact time.
    */
-  protected trackPosition(channel: Channel, item: Item): void {
+  trackPosition(channel: Channel, item: Item): void {
     if (item.positionTimer !== undefined) clearTimeout(item.positionTimer);
     item.positionTimer = undefined;
     const element = item.element;
@@ -752,7 +737,7 @@ export class QueueEngine {
   }
 
   /** Fires enter/exit events for cues the position moved into or out of. */
-  protected updateCues(channel: Channel, item: Item, position: number): void {
+  updateCues(channel: Channel, item: Item, position: number): void {
     const last = item.lastCueMs;
     item.lastCueMs = position;
     item.cues.forEach((cue, index) => {
@@ -769,14 +754,14 @@ export class QueueEngine {
   }
 
   /** Ends every ranged cue still active on an item (it stopped, ended or restarted). */
-  protected exitCues(item: Item): void {
+  exitCues(item: Item): void {
     const channel = this.channels.get(item.channelNumber);
     const active = [...item.activeCues];
     item.activeCues.clear();
     if (channel) active.forEach((index) => this.emitCue(channel, item, index, false));
   }
 
-  protected emitCue(channel: Channel, item: Item, index: number, active: boolean): void {
+  emitCue(channel: Channel, item: Item, index: number, active: boolean): void {
     const cue = item.cues[index];
     if (!cue) return;
     this.emitter.emit('cue', channel.channelNumber, {
@@ -792,7 +777,7 @@ export class QueueEngine {
   }
 
   /** The position reached `endAt`: loop the segment, or treat it as the end of the file. */
-  protected reachSegmentEnd(channel: Channel, item: Item): void {
+  reachSegmentEnd(channel: Channel, item: Item): void {
     const element = item.element;
     if (item.loop && element) {
       this.exitCues(item);
@@ -805,11 +790,7 @@ export class QueueEngine {
   }
 
   /** Where the crossfade into the next item should start, if one applies. */
-  protected crossfadeStart(
-    channel: Channel,
-    item: Item,
-    element: HTMLAudioElement
-  ): number | undefined {
+  crossfadeStart(channel: Channel, item: Item, element: HTMLAudioElement): number | undefined {
     const end = item.endAt ?? secondsToMs(element.duration);
     const hasNext = channel.items.length > 1 || channel.repeat === 'all';
     if (channel.crossfadeMs <= 0 || item.loop || channel.repeat === 'one') return undefined;
@@ -818,7 +799,7 @@ export class QueueEngine {
   }
 
   /** Starts the next item fading in while this one fades out, then lets this one go. */
-  protected beginCrossfade(channel: Channel, item: Item, element: HTMLAudioElement): void {
+  beginCrossfade(channel: Channel, item: Item, element: HTMLAudioElement): void {
     const fadeMs = crossfadeLength(channel, item, item.endAt ?? secondsToMs(element.duration));
     const startGain = channel.effectiveGain(this.masterGain());
     channel.items.shift();
@@ -846,7 +827,7 @@ export class QueueEngine {
   }
 
   /** Releases the item that is fading out of a crossfade, if any. */
-  protected stopOutgoing(channel: Channel): void {
+  stopOutgoing(channel: Channel): void {
     const outgoing = channel.outgoing;
     if (!outgoing) return;
     channel.outgoing = undefined;
@@ -855,13 +836,13 @@ export class QueueEngine {
     this.finalize(outgoing, 'ended');
   }
 
-  protected setItemGain(item: Item, gain: number): void {
+  setItemGain(item: Item, gain: number): void {
     if (item.route) this.webAudio.setGain(item.route, gain);
     else if (item.element) item.element.volume = gain;
   }
 
   /** Waits `gapMs` before the next item starts. */
-  protected startGap(channel: Channel): void {
+  startGap(channel: Channel): void {
     channel.clearGap();
     if (channel.gapMs <= 0 || channel.items.length === 0) return;
     channel.gapTimer = setTimeout(() => {
@@ -871,7 +852,7 @@ export class QueueEngine {
   }
 
   /** Releases everything an item holds. Safe to call more than once. */
-  protected finalize(item: Item, outcome: ItemOutcome): void {
+  finalize(item: Item, outcome: ItemOutcome): void {
     if (item.settled) return;
     item.settled = true;
     item.blocked = false;
@@ -885,7 +866,7 @@ export class QueueEngine {
   }
 
   /** Frees an item's element (network, decoder, listeners, Web Audio) but keeps it queued. */
-  protected unload(item: Item): void {
+  unload(item: Item): void {
     this.clearLoadTimer(item);
     if (item.positionTimer !== undefined) clearTimeout(item.positionTimer);
     item.positionTimer = undefined;
@@ -903,7 +884,7 @@ export class QueueEngine {
     item.playRequested = false;
   }
 
-  protected startLoadTimer(channel: Channel, item: Item): void {
+  startLoadTimer(channel: Channel, item: Item): void {
     this.clearLoadTimer(item);
     const timeoutMs = this.config.loadTimeoutMs;
     if (item.started || timeoutMs <= 0) return;
@@ -916,17 +897,12 @@ export class QueueEngine {
     }, timeoutMs);
   }
 
-  protected clearLoadTimer(item: Item): void {
+  clearLoadTimer(item: Item): void {
     if (item.loadTimer !== undefined) clearTimeout(item.loadTimer);
     item.loadTimer = undefined;
   }
 
-  protected fade(
-    channel: Channel,
-    to: number,
-    duration: number,
-    easing: EasingType
-  ): Promise<boolean> {
+  fade(channel: Channel, to: number, duration: number, easing: EasingType): Promise<boolean> {
     channel.fadeTween?.cancel();
     const tween: Tween = startTween({
       duration,
@@ -946,7 +922,7 @@ export class QueueEngine {
   }
 
   /** Resume settings: explicit arguments win, then the pause fade's, then the Gentle preset. */
-  protected resumeFadeSettings(
+  resumeFadeSettings(
     channel: Channel,
     fadeType: FadeType | undefined,
     duration: number | undefined
@@ -958,14 +934,14 @@ export class QueueEngine {
     };
   }
 
-  protected resetFade(channel: Channel): void {
+  resetFade(channel: Channel): void {
     channel.fadeTween?.cancel();
     channel.fadeTween = undefined;
     channel.fadeFactor = 1;
     this.applyGain(channel);
   }
 
-  protected duckTargetFor(channelNumber: number): number {
+  duckTargetFor(channelNumber: number): number {
     const ducking = this.ducking;
     if (!ducking) return 1;
     const priority = this.channels.get(ducking.priorityChannel);
@@ -980,7 +956,7 @@ export class QueueEngine {
    * @param ducking - Settings for the transition; clearVolumeDucking passes the old settings so
    * the restore uses their restoreTransitionDuration
    */
-  protected updateDucking(ducking: VolumeConfig | undefined = this.ducking): void {
+  updateDucking(ducking: VolumeConfig | undefined = this.ducking): void {
     this.channels.forEach((channel) => {
       const target = this.duckTargetFor(channel.channelNumber);
       if (target === channel.duckTarget) return;
@@ -1004,19 +980,19 @@ export class QueueEngine {
   }
 
   /** Global volume, or 0 while everything is muted. */
-  protected masterGain(): number {
+  masterGain(): number {
     return this.globalMuted ? 0 : this.globalVolume;
   }
 
   /** Applies a mute change: new gains everywhere, and a crossfade's fading tail goes silent. */
-  protected applyMute(channels: Iterable<Channel>): void {
+  applyMute(channels: Iterable<Channel>): void {
     for (const channel of channels) {
       if (this.globalMuted || channel.muted) this.stopOutgoing(channel);
       this.applyGain(channel);
     }
   }
 
-  protected applyGain(channel: Channel): void {
+  applyGain(channel: Channel): void {
     const head = channel.head;
     if (!head?.element) return;
     // A volume change can be what makes an item need Web Audio (iOS); routing is idempotent.
@@ -1031,13 +1007,13 @@ export class QueueEngine {
     }
   }
 
-  protected applyRate(channel: Channel): void {
+  applyRate(channel: Channel): void {
     const element = channel.head?.element;
     if (element) element.playbackRate = channel.effectiveRate();
   }
 
   /** Jumps to `startAt` once, before the item has played. */
-  protected applyStartAt(item: Item, element: HTMLAudioElement): void {
+  applyStartAt(item: Item, element: HTMLAudioElement): void {
     if (item.started || item.startAt <= 0) return;
     try {
       element.currentTime = item.startAt / 1000;
@@ -1050,7 +1026,7 @@ export class QueueEngine {
    * Seeks can fail silently: a server without HTTP Range support makes the file unseekable until
    * it has downloaded. If playback starts away from `startAt`, seek again once and say why.
    */
-  protected checkStartAt(item: Item): void {
+  checkStartAt(item: Item): void {
     const element = item.element;
     if (!element || item.startAt <= 0) return;
     if (Math.abs(element.currentTime * 1000 - item.startAt) <= START_TOLERANCE_MS) return;
@@ -1065,7 +1041,7 @@ export class QueueEngine {
   }
 
   /** The browser or OS paused playback (phone call, headphones unplugged, media controls). */
-  protected onElementPause(channel: Channel, item: Item, element: HTMLAudioElement): void {
+  onElementPause(channel: Channel, item: Item, element: HTMLAudioElement): void {
     // Our own pauses set channel.paused first; the pause fired right before `ended` is not one.
     if (channel.paused || element.ended || !item.started) return;
     channel.paused = true;
@@ -1075,7 +1051,7 @@ export class QueueEngine {
   }
 
   /** The browser or OS resumed playback (for example from lock-screen controls). */
-  protected onElementPlay(channel: Channel, item: Item): void {
+  onElementPlay(channel: Channel, item: Item): void {
     if (!channel.paused) return;
     channel.paused = false;
     channel.pendingPause = false;
@@ -1086,7 +1062,7 @@ export class QueueEngine {
   }
 
   /** Pauses a channel now (shared by pauseChannel, fades and pauseWhenHidden). */
-  protected pauseNow(channel: Channel): void {
+  pauseNow(channel: Channel): void {
     const head = channel.head;
     if (!head || channel.paused) return;
     channel.fadeTween?.cancel();
@@ -1103,7 +1079,7 @@ export class QueueEngine {
    * Resumes a paused channel, or cancels a pause that is still fading out. Resolves once the
    * browser accepted or refused playback, or after `loadTimeoutMs` at most.
    */
-  protected async resumeNow(channel: Channel): Promise<void> {
+  async resumeNow(channel: Channel): Promise<void> {
     const head = channel.head;
     if (!head) return;
     if (!channel.paused) {
@@ -1127,7 +1103,7 @@ export class QueueEngine {
     if (attempt) await settleWithin(attempt, this.config.loadTimeoutMs);
   }
 
-  protected readonly onVisibilityChange = (): void => {
+  readonly onVisibilityChange = (): void => {
     if (typeof document === 'undefined') return;
     this.channels.forEach((channel) => {
       if (document.hidden) {
@@ -1141,7 +1117,7 @@ export class QueueEngine {
   };
 
   /** Adds or removes the visibilitychange listener to match `pauseWhenHidden`. */
-  protected syncVisibilityListener(): void {
+  syncVisibilityListener(): void {
     if (typeof document === 'undefined') return;
     const wanted = this.config.pauseWhenHidden;
     if (wanted === this.visibilityArmed) return;
@@ -1151,7 +1127,7 @@ export class QueueEngine {
   }
 
   /** Stops a channel and forgets it, synchronously (no awaits, so nothing can interleave). */
-  protected destroyNow(channelNumber: number): void {
+  destroyNow(channelNumber: number): void {
     const channel = this.channels.get(channelNumber);
     if (channel) {
       this.clearChannel(channel);
@@ -1164,29 +1140,29 @@ export class QueueEngine {
   }
 
   /** Whether a channel is paused or a pause is fading out (so a toggle should resume). */
-  protected isPausedOrPausing(channelNumber: number): boolean {
+  isPausedOrPausing(channelNumber: number): boolean {
     const channel = this.channels.get(channelNumber);
     return channel !== undefined && (channel.paused || channel.pendingPause);
   }
 
-  protected anyPlaying(): boolean {
+  anyPlaying(): boolean {
     for (const channel of this.channels.values()) {
       if (channel.head && !channel.paused && !channel.pendingPause) return true;
     }
     return false;
   }
 
-  protected hasBlockedItems(): boolean {
+  hasBlockedItems(): boolean {
     for (const channel of this.channels.values()) {
       if (channel.head?.blocked === true) return true;
     }
     return false;
   }
 
-  protected readonly onUserGesture = (): void => this.unlockBlocked();
+  readonly onUserGesture = (): void => this.unlockBlocked();
 
   /** Retries every blocked, unpaused channel (call from a user gesture). */
-  protected unlockBlocked(): void {
+  unlockBlocked(): void {
     this.webAudio.resume();
     this.channels.forEach((channel) => {
       const head = channel.head;
@@ -1196,7 +1172,7 @@ export class QueueEngine {
     });
   }
 
-  protected armUnlock(): void {
+  armUnlock(): void {
     if (this.unlockArmed || typeof document === 'undefined') return;
     this.unlockArmed = true;
     UNLOCK_EVENTS.forEach((type) =>
@@ -1204,7 +1180,7 @@ export class QueueEngine {
     );
   }
 
-  protected disarmUnlock(): void {
+  disarmUnlock(): void {
     if (!this.unlockArmed || typeof document === 'undefined') return;
     this.unlockArmed = false;
     UNLOCK_EVENTS.forEach((type) =>
@@ -1212,11 +1188,7 @@ export class QueueEngine {
     );
   }
 
-  protected checkSlot(
-    channel: Channel | undefined,
-    slot: number,
-    verb: string
-  ): string | undefined {
+  checkSlot(channel: Channel | undefined, slot: number, verb: string): string | undefined {
     if (!channel) return 'Channel does not exist';
     const count = channel.items.length;
     if (!Number.isInteger(slot) || slot < 0 || slot >= count) {
@@ -1228,7 +1200,7 @@ export class QueueEngine {
     return undefined;
   }
 
-  protected afterManipulation(channel: Channel, changed: boolean = true): QueueManipulationResult {
+  afterManipulation(channel: Channel, changed: boolean = true): QueueManipulationResult {
     if (changed) {
       this.emitQueueChange(channel);
       this.refresh(channel);
@@ -1236,7 +1208,7 @@ export class QueueEngine {
     return { success: true, updatedQueue: this.snapshot(channel) };
   }
 
-  protected snapshot(channel: Channel): QueueSnapshot {
+  snapshot(channel: Channel): QueueSnapshot {
     return {
       channelNumber: channel.channelNumber,
       currentIndex: channel.items.length > 0 ? 0 : -1,
@@ -1247,7 +1219,7 @@ export class QueueEngine {
     };
   }
 
-  protected emptySnapshot(channelNumber: number): QueueSnapshot {
+  emptySnapshot(channelNumber: number): QueueSnapshot {
     return {
       channelNumber,
       currentIndex: -1,
@@ -1258,7 +1230,7 @@ export class QueueEngine {
     };
   }
 
-  protected describeHead(channel: Channel, item: Item): AudioInfo {
+  describeHead(channel: Channel, item: Item): AudioInfo {
     const element = item.element;
     const duration = secondsToMs(element?.duration ?? NaN);
     const currentTime = secondsToMs(element?.currentTime ?? 0);
@@ -1281,18 +1253,18 @@ export class QueueEngine {
     };
   }
 
-  protected emitProgress(channel: Channel, item: Item): void {
+  emitProgress(channel: Channel, item: Item): void {
     if (!this.emitter.has('progress', channel.channelNumber)) return;
     this.emitter.emit('progress', channel.channelNumber, this.describeHead(channel, item));
   }
 
-  protected emitQueueChange(channel: Channel): void {
+  emitQueueChange(channel: Channel): void {
     // Snapshots are only built for someone: a listener, or the debug log.
     if (!this.config.debug && !this.emitter.has('queuechange', channel.channelNumber)) return;
     this.emitter.emit('queuechange', channel.channelNumber, this.snapshot(channel));
   }
 
-  protected emitError(
+  emitError(
     channel: Channel,
     item: Item,
     errorType: AudioErrorType,

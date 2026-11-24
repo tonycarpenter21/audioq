@@ -11,6 +11,11 @@
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
     },
+    "./queue": {
+      "types": "./dist/types/queue.d.ts",
+      "import": "./dist/esm/queue.js",
+      "require": "./dist/cjs/queue.js"
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,

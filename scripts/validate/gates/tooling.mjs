@@ -30,9 +30,9 @@ export const toolingGates = [
         return fail('src/default-queue.ts is missing', ['Run: npm run generate']);
       }
       return current === expected
-        ? pass('default-queue.ts is in sync with AudioQueue')
+        ? pass('default-queue.ts is in sync with src/queue.ts')
         : fail('src/default-queue.ts is out of date', [
-            'AudioQueue changed but the top-level functions were not regenerated.',
+            'src/queue.ts changed but the top-level functions were not regenerated.',
             'Run: npm run generate'
           ]);
     },
@@ -224,7 +224,7 @@ export const toolingGates = [
       for (const rule of validationConfig.requiredLintRules) presetRules.add(rule);
       const eslint = new ESLint({ cwd: abs('.') });
       const problems = [];
-      for (const file of ['src/engine.ts', '__tests__/audio-queue.test.ts']) {
+      for (const file of ['src/engine.ts', '__tests__/queue.test.ts']) {
         const config = await eslint.calculateConfigForFile(abs(file));
         for (const rule of presetRules) {
           const setting = config.rules?.[rule];
