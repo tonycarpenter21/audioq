@@ -18,6 +18,13 @@
     },
     "./package.json": "./package.json"
   },
+  "typesVersions": {
+    "*": {
+      "queue": [
+        "./dist/types/queue.d.ts"
+      ]
+    }
+  },
   "sideEffects": false,
   "files": [
     "dist",

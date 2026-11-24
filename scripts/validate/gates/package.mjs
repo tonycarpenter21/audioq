@@ -111,6 +111,12 @@ export const packageGates = [
       for (const [subpath, target] of entryPoints(pkg)) {
         need(Object.keys(target)[0] === 'types', `exports["${subpath}"].types must come first`);
         need(target.import && target.require, `exports["${subpath}"] needs import and require`);
+        // TypeScript with moduleResolution "node" ignores exports and finds subpath types here.
+        const legacyTypes = pkg.typesVersions?.['*']?.[subpath.replace('./', '')]?.[0];
+        need(
+          subpath === '.' || legacyTypes === target.types,
+          `typesVersions["*"]["${subpath.replace('./', '')}"] must be ["${target.types}"]`
+        );
       }
       need(pkg.scripts?.['validate:all'] !== undefined, 'scripts["validate:all"] is missing');
       return problems.length === 0
