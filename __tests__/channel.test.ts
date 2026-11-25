@@ -12,6 +12,7 @@ const item = (overrides: Partial<Item> = {}): Item => ({
   activeCues: new Set(),
   blocked: false,
   onSpareElement: false,
+  reloading: undefined,
   channelNumber: 0,
   crossOrigin: undefined,
   cues: [],

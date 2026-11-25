@@ -47,7 +47,7 @@ import {
   type VolumeConfig,
   type WebAudioSupport
 } from './types.js';
-import { assertChannelNumber, clampUnit, secondsToMs } from './utils.js';
+import { assertChannelNumber, clampUnit } from './utils.js';
 import { describeWebAudioSupport } from './web-audio.js';
 
 /**
@@ -852,11 +852,9 @@ export function unlockAudio(queue: AudioQueue): void {
  */
 export function seekTo(queue: AudioQueue, channelNumber: number, positionMs: number): boolean {
   const engine = engineOf(queue);
-  const element = engine.existing(channelNumber)?.head?.element;
-  if (!element || !Number.isFinite(positionMs)) return false;
-  const durationMs = secondsToMs(element.duration);
-  const target = Math.max(0, durationMs > 0 ? Math.min(positionMs, durationMs) : positionMs);
-  element.currentTime = target / 1000;
+  const head = engine.existing(channelNumber)?.head;
+  if (!head?.element || !Number.isFinite(positionMs)) return false;
+  engine.seekItem(head, positionMs);
   return true;
 }
 
@@ -869,9 +867,9 @@ export function seekTo(queue: AudioQueue, channelNumber: number, positionMs: num
  */
 export function seekBy(queue: AudioQueue, channelNumber: number, offsetMs: number): boolean {
   const engine = engineOf(queue);
-  const element = engine.existing(channelNumber)?.head?.element;
-  if (!element || !Number.isFinite(offsetMs)) return false;
-  return seekTo(queue, channelNumber, secondsToMs(element.currentTime) + offsetMs);
+  const head = engine.existing(channelNumber)?.head;
+  if (!head?.element || !Number.isFinite(offsetMs)) return false;
+  return seekTo(queue, channelNumber, engine.positionOf(head) + offsetMs);
 }
 
 /**

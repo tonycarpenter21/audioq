@@ -314,6 +314,7 @@ export class QueueEngine {
       onSpareElement: false,
       playRequested: false,
       positionTimer: undefined,
+      reloading: undefined,
       resolveFinished,
       resolveStarted,
       route: undefined,
@@ -434,7 +435,7 @@ export class QueueEngine {
         'play',
         whenHead(() => this.onElementPlay(channel, item))
       ),
-      listen(element, 'loadedmetadata', () => this.applyStartAt(item, element)),
+      listen(element, 'loadedmetadata', () => this.onLoadedMetadata(item, element)),
       listen(element, 'error', () => {
         if (channel.outgoing === item) this.stopOutgoing(channel);
         else if (!item.settled) this.onElementError(channel, item);
@@ -463,7 +464,7 @@ export class QueueEngine {
    * is panned or analysed; and on iOS ('auto') once its volume is between silent and full, because
    * iOS ignores element volume. Routing on iOS is kept to that minimum on purpose: there, an
    * element routed through Web Audio loses lock-screen and background playback and can drift out
-   * of sync on pause and resume (WebKit bugs 204228, 237323, 261554).
+   * of sync on pause and resume (WebKit bugs 204228, 237323, 261554; see reloadAtPosition).
    */
   routeThroughWebAudio(channel: Channel, item: Item, element: HTMLAudioElement): void {
     if (item.route) return;
@@ -649,7 +650,7 @@ export class QueueEngine {
       fileName: item.fileName,
       id: item.id,
       metadata: item.metadata,
-      playedMs: secondsToMs(item.element?.currentTime ?? 0),
+      playedMs: this.positionOf(item),
       reason,
       src: item.src
     };
@@ -727,7 +728,7 @@ export class QueueEngine {
     item.positionTimer = undefined;
     const element = item.element;
     if (!element || item.settled || channel.head !== item) return;
-    const position = secondsToMs(element.currentTime);
+    const position = this.positionOf(item);
     this.updateCues(channel, item, position);
     if (channel.paused || element.paused) return;
     if (item.endAt !== undefined && position >= item.endAt - END_TOLERANCE_MS) {
@@ -1104,12 +1105,7 @@ export class QueueEngine {
     this.resetFade(channel);
     channel.paused = false;
     channel.hiddenPause = false;
-    // iOS can resume a Web Audio-routed element from stale buffered audio (WebKit bug 237323), so
-    // the audio restarts from an earlier pause; seeking to where it is flushes that buffer.
-    if (head.route && head.element && isIOSDevice()) {
-      const position = head.element.currentTime;
-      head.element.currentTime = position;
-    }
+    if (head.started && head.element && isIOSDevice()) this.reloadAtPosition(head, head.element);
     const attempt = channel.gapTimer === undefined ? this.play(channel, head) : undefined;
     this.emitter.emit('resume', channel.channelNumber, this.describeHead(channel, head));
     if (attempt) await settleWithin(attempt, this.config.loadTimeoutMs);
@@ -1242,10 +1238,56 @@ export class QueueEngine {
     };
   }
 
+  /** Playback position (ms), or where an iOS resume is reloading the element to. */
+  positionOf(item: Item): number {
+    return item.reloading?.positionMs ?? secondsToMs(item.element?.currentTime ?? 0);
+  }
+
+  /**
+   * iOS does not resume a paused element cleanly: a plain one jumps about half a second ahead
+   * (words are skipped), and one routed through Web Audio replays audio it had buffered (words
+   * repeat), with or without a seek first. Reloading the same element and seeking back to the
+   * paused position resumes in the right place in both cases (measured on iPhone with the demo's
+   * device diagnostics). The element keeps its permission to play and its Web Audio routing.
+   * play() is called right after, as for any resume; the seek happens on loadedmetadata.
+   */
+  reloadAtPosition(item: Item, element: HTMLAudioElement): void {
+    // Paused and resumed again before the last reload finished: that one still knows the position.
+    item.reloading ??= { durationMs: this.durationOf(item), positionMs: this.positionOf(item) };
+    element.load();
+  }
+
+  /** Duration (ms), remembered while an iOS resume reloads the element; 0 while unknown. */
+  durationOf(item: Item): number {
+    return item.reloading?.durationMs ?? secondsToMs(item.element?.duration ?? NaN);
+  }
+
+  /** Moves an item to a position (ms, clamped to the file), even while it is reloading. */
+  seekItem(item: Item, positionMs: number): void {
+    const durationMs = this.durationOf(item);
+    const target = Math.max(0, durationMs > 0 ? Math.min(positionMs, durationMs) : positionMs);
+    if (item.reloading) item.reloading.positionMs = target;
+    else if (item.element) item.element.currentTime = target / 1000;
+  }
+
+  /** Positions a freshly loaded element: back to the paused point after a reload, or at startAt. */
+  onLoadedMetadata(item: Item, element: HTMLAudioElement): void {
+    this.finishReload(item, element);
+    this.applyStartAt(item, element);
+  }
+
+  /** Moves a reloaded element back to where it was paused (see reloadAtPosition). */
+  finishReload(item: Item, element: HTMLAudioElement): void {
+    const reloading = item.reloading;
+    if (!reloading) return;
+    item.reloading = undefined;
+    element.currentTime = reloading.positionMs / 1000;
+  }
+
   describeHead(channel: Channel, item: Item): AudioInfo {
     const element = item.element;
-    const duration = secondsToMs(element?.duration ?? NaN);
-    const currentTime = secondsToMs(element?.currentTime ?? 0);
+    const duration = this.durationOf(item);
+    const currentTime = this.positionOf(item);
     const isPaused = channel.paused || (element?.paused ?? true);
     return {
       currentTime,

@@ -477,8 +477,9 @@ button.addEventListener('click', () => unlockAudio());
 iOS ignores `HTMLAudioElement.volume`, so volume, fades and ducking there need the Web Audio API.
 With `webAudio: 'auto'` (the default) audioq routes a sound through it only while its volume is
 between silent and full, or when its channel is panned or analysed. Audio at full volume stays
-native, because on iOS routed audio loses lock-screen and background playback and can drift out of
-sync on pause. Muting uses the element's `muted` flag, which iOS honours. iOS also refuses to
+native, because on iOS routed audio loses lock-screen and background playback. iOS also does not
+resume a paused element cleanly (it skips ahead, or replays buffered audio when routed), so on iOS
+audioq resumes by reloading the element and seeking back to where it was paused. Muting uses the element's `muted` flag, which iOS honours. iOS also refuses to
 start a new audio element outside a tap, so when the next item in a queue is refused, audioq moves
 it onto an element that has already played (iOS lets those play again) and retries. Upcoming items
 are not preloaded on iOS (`prefetchCount` is ignored there): an element that loads in the

@@ -25,6 +25,11 @@ export interface Item {
   blocked: boolean;
   /** Moved onto a spare element after the browser refused to start its own (iOS); once only. */
   onSpareElement: boolean;
+  /**
+   * Set while a resume on iOS reloads the element: where it resumes and how long the file is,
+   * reported until the reloaded element has its metadata and has been moved back there (ms).
+   */
+  reloading: { durationMs: number; positionMs: number } | undefined;
   /** Channel number. */
   readonly channelNumber: number;
   /** CORS mode for the element. */

@@ -64,9 +64,10 @@ import {
   togglePauseChannel,
   togglePauseWithFade,
   transitionVolume,
-  unlockAudio
+  unlockAudio,
+  seekBy
 } from '../src/queue';
-import type { AudioInfo, QueueConfig, QueueSnapshot } from '../src/types';
+import type { AudioInfo, AudioQueueOptions, QueueConfig, QueueSnapshot } from '../src/types';
 import { AudioErrorType, EasingType, FadeType } from '../src/types';
 import {
   DESKTOP_UA,
@@ -1472,16 +1473,66 @@ describe('Web Audio routing', () => {
     expect(audioAt(0).muted).toBe(false);
   });
 
-  test('on iOS a routed item is re-seeked on resume, so it does not replay stale audio', async () => {
-    setUserAgent(IPHONE_UA);
-    const queue = setup({ webAudio: 'auto' });
-    await queueAudio(queue, '/a.mp3', 0, { volume: 0.5 });
-    await flush();
-    audioAt(0).tick(3);
-    await pauseChannel(queue, 0);
-    const seeks = jest.spyOn(audioAt(0), 'currentTime', 'set');
-    await resumeChannel(queue, 0);
-    expect(seeks).toHaveBeenCalledWith(3);
+  describe('on iOS, resuming reloads the element and seeks back (iOS skips or replays otherwise)', () => {
+    /** Plays /a.mp3 on iOS, moves to 3 s and pauses; the next play() does not start by itself. */
+    const pausedAtThreeSeconds = async (options: AudioQueueOptions = {}): Promise<AudioQueue> => {
+      setUserAgent(IPHONE_UA);
+      const queue = setup({ webAudio: 'auto' });
+      await queueAudio(queue, '/a.mp3', 0, options);
+      await flush();
+      audioAt(0).tick(3);
+      await pauseChannel(queue, 0);
+      audioAt(0).playBehavior = 'resolve-silently';
+      return queue;
+    };
+
+    test.each([
+      ['at full volume', {}],
+      ['through Web Audio', { volume: 0.5 }]
+    ])('%s', async (_, options) => {
+      const queue = await pausedAtThreeSeconds(options);
+      const loads = audioAt(0).loadCalls;
+      await resumeChannel(queue, 0);
+      expect(audioAt(0).loadCalls).toBe(loads + 1);
+      // While it reloads, the element reads 0; the queue still reports where it is resuming.
+      expect(audioAt(0).currentTime).toBe(0);
+      expect(getCurrentAudioInfo(queue, 0)).toEqual(
+        expect.objectContaining({ currentTime: 3000, duration: 10000 })
+      );
+      audioAt(0).startPlaying();
+      expect(audioAt(0).currentTime).toBe(3);
+      expect(getCurrentAudioInfo(queue, 0)?.currentTime).toBe(3000);
+    });
+
+    test('pausing and resuming again before the reload finishes keeps the position', async () => {
+      const queue = await pausedAtThreeSeconds();
+      await resumeChannel(queue, 0);
+      await pauseChannel(queue, 0);
+      await resumeChannel(queue, 0);
+      audioAt(0).startPlaying();
+      expect(audioAt(0).currentTime).toBe(3);
+    });
+
+    test('a seek while reloading moves where it resumes', async () => {
+      const queue = await pausedAtThreeSeconds();
+      await resumeChannel(queue, 0);
+      expect(seekBy(queue, 0, 2000)).toBe(true);
+      expect(getCurrentAudioInfo(queue, 0)?.currentTime).toBe(5000);
+      audioAt(0).startPlaying();
+      expect(audioAt(0).currentTime).toBe(5);
+    });
+
+    test('other platforms resume with play() alone', async () => {
+      const queue = setup();
+      await queueAudio(queue, '/a.mp3');
+      await flush();
+      audioAt(0).tick(3);
+      await pauseChannel(queue, 0);
+      const loads = audioAt(0).loadCalls;
+      await resumeChannel(queue, 0);
+      expect(audioAt(0).loadCalls).toBe(loads);
+      expect(audioAt(0).currentTime).toBe(3);
+    });
   });
 
   test('desktop resumes without re-seeking', async () => {

@@ -87,8 +87,11 @@ top-level functions keeps working; see [MIGRATION.md](MIGRATION.md) for the brea
   only for same-origin sources or items with `crossOrigin` set).
 - On iOS, audio routed through Web Audio lost lock-screen and background playback, and could resume
   from an earlier pause point (WebKit bugs). Routing is now used only while a sound's volume is
-  between silent and full (or it is panned or analysed); muting uses the element's `muted` flag;
-  routed items are re-seeked on resume.
+  between silent and full (or it is panned or analysed); muting uses the element's `muted` flag.
+- On iOS, resuming after a pause skipped about half a second (words were lost), or, for audio
+  routed through Web Audio, replayed audio from before the pause. Resuming on iOS now reloads the
+  element and seeks back to the paused position; `getCurrentAudioInfo` and progress report that
+  position while it reloads.
 - On iOS, queued items after the first one or two could refuse to play (iOS only lets an element
   play without a tap if it has played before). A refused item is now moved onto a released element
   that has played, and retried.

@@ -49,6 +49,8 @@ export class FakeAudio extends EventTarget {
   private source: string = '';
   private baseTime: number = 0;
   private clockStartedAt: number | undefined;
+  /** The duration before the last load(), restored when the file loads again. */
+  private loadedDuration: number | undefined;
 
   constructor(src?: string) {
     super();
@@ -107,8 +109,15 @@ export class FakeAudio extends EventTarget {
     if (name === 'src') this.source = '';
   }
 
+  /** Like a browser: forgets the position and metadata until the file loads again. */
   load(): void {
     this.loadCalls++;
+    this.runClock(false);
+    this.baseTime = 0;
+    this.readyState = 0;
+    if (Number.isFinite(this.duration)) this.loadedDuration = this.duration;
+    this.duration = NaN;
+    this.fire('emptied');
   }
 
   pause(): void {
@@ -176,7 +185,7 @@ export class FakeAudio extends EventTarget {
   }
 
   /** Simulates metadata loading and playback starting. */
-  startPlaying(duration: number = 10): void {
+  startPlaying(duration: number = this.loadedDuration ?? 10): void {
     if (Number.isNaN(this.duration)) this.duration = duration;
     this.readyState = 4;
     this.paused = false;
